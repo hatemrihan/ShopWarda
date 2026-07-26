@@ -1,0 +1,158 @@
+<style>
+  .sw-wrap { color: #f7f7f5; }
+  .sw-kicker { color: #67a6ff; text-transform: uppercase; letter-spacing: .18em; font-size: 11px; font-weight: 800; }
+  .sw-title { max-width: 900px; margin: 8px 0 6px; }
+  .sw-note { max-width: 920px; }
+  .sw-map { display: grid; grid-template-columns: 1fr 52px 1.12fr 52px 1fr; gap: 12px; align-items: stretch; margin: 28px 0 24px; }
+  .sw-column { border: 1px solid #363634; background: #171716; border-radius: 18px; padding: 18px; min-width: 0; }
+  .sw-column.core { border-color: #315c94; box-shadow: inset 0 0 0 1px rgba(76,145,235,.12); }
+  .sw-column h3 { margin: 0 0 5px; font-size: 18px; }
+  .sw-column > p { color: #8f8f8a; margin: 0 0 15px; font-size: 13px; line-height: 1.45; }
+  .sw-section { margin-top: 16px; }
+  .sw-section-label { color: #777771; text-transform: uppercase; letter-spacing: .12em; font-size: 10px; margin-bottom: 8px; font-weight: 800; }
+  .sw-chipset { display: flex; flex-wrap: wrap; gap: 7px; }
+  .sw-chip { border: 1px solid #3a3a37; background: #222220; color: #d9d9d5; border-radius: 8px; padding: 7px 9px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+  .sw-chip.new { border-color: #315c94; color: #8bbcff; background: #172339; }
+  .sw-list { display: grid; gap: 8px; }
+  .sw-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: #21211f; border: 1px solid #333330; padding: 9px 10px; border-radius: 9px; font-size: 12px; }
+  .sw-item b { color: #f2f2ef; }
+  .sw-item span { color: #85857f; text-align: right; }
+  .sw-arrow { display: flex; align-items: center; justify-content: center; color: #5598ef; font-size: 24px; }
+  .sw-data { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .sw-model { border: 1px solid #353532; border-radius: 10px; padding: 9px; background: #20201e; }
+  .sw-model strong { display: block; font-size: 12px; color: #eeeeea; }
+  .sw-model small { color: #797973; font-size: 10px; }
+  .sw-flow { margin: 2px 0 24px; border: 1px solid #343431; border-radius: 14px; background: #151514; padding: 14px 16px; }
+  .sw-flow-title { color: #868680; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .12em; margin-bottom: 11px; }
+  .sw-flow-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: #bdbdb7; font-size: 12px; }
+  .sw-node { padding: 7px 10px; border-radius: 8px; background: #242422; border: 1px solid #3a3a36; }
+  .sw-node.accent { color: #8bbcff; border-color: #315c94; background: #172339; }
+  .sw-sep { color: #555550; }
+  .sw-decisions { margin-top: 22px; }
+  @media (max-width: 980px) {
+    .sw-map { grid-template-columns: 1fr; }
+    .sw-arrow { transform: rotate(90deg); min-height: 32px; }
+  }
+</style>
+
+<div class="sw-wrap">
+  <div class="sw-kicker">ShopWarda · Architecture foundation</div>
+  <h2 class="sw-title">Does this system boundary and route map match the store you want?</h2>
+  <p class="subtitle sw-note">Single merchant, guest checkout, Egypt/EGP, browser-persistent carts, COD or InstaPay proof, and a dense right-sidebar admin inspired by your Unlimited project.</p>
+
+  <div class="sw-map">
+    <section class="sw-column">
+      <h3>Public storefront</h3>
+      <p>Fast, SEO-friendly shopping. Customers never create accounts.</p>
+
+      <div class="sw-section">
+        <div class="sw-section-label">Routes</div>
+        <div class="sw-chipset">
+          <div class="sw-chip">/</div>
+          <div class="sw-chip">/shop</div>
+          <div class="sw-chip new">/categories</div>
+          <div class="sw-chip new">/categories/[slug]</div>
+          <div class="sw-chip">/products/[slug]</div>
+          <div class="sw-chip">/cart</div>
+          <div class="sw-chip">/checkout</div>
+          <div class="sw-chip">/contact</div>
+        </div>
+      </div>
+
+      <div class="sw-section">
+        <div class="sw-section-label">Customer experience</div>
+        <div class="sw-list">
+          <div class="sw-item"><b>Catalog</b><span>categories · filters · search</span></div>
+          <div class="sw-item"><b>Product</b><span>images · colors · variants</span></div>
+          <div class="sw-item"><b>Checkout</b><span>COD · InstaPay screenshot</span></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="sw-arrow">→</div>
+
+    <section class="sw-column core">
+      <h3>Commerce core</h3>
+      <p>One modular Next.js application: server-rendered storefront, protected admin, typed services, and MongoDB.</p>
+
+      <div class="sw-section">
+        <div class="sw-section-label">Business modules</div>
+        <div class="sw-data">
+          <div class="sw-model"><strong>Catalog</strong><small>products + categories</small></div>
+          <div class="sw-model"><strong>Inventory</strong><small>variant stock</small></div>
+          <div class="sw-model"><strong>Cart</strong><small>anonymous + TTL</small></div>
+          <div class="sw-model"><strong>Checkout</strong><small>pricing snapshot</small></div>
+          <div class="sw-model"><strong>Orders</strong><small>fulfillment states</small></div>
+          <div class="sw-model"><strong>Marketing</strong><small>contacts + subscribers</small></div>
+        </div>
+      </div>
+
+      <div class="sw-section">
+        <div class="sw-section-label">Data & integrations</div>
+        <div class="sw-list">
+          <div class="sw-item"><b>MongoDB</b><span>source of truth</span></div>
+          <div class="sw-item"><b>Media storage</b><span>products + payment proofs</span></div>
+          <div class="sw-item"><b>Analytics adapter</b><span>Google now · Meta later</span></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="sw-arrow">→</div>
+
+    <section class="sw-column">
+      <h3>Protected admin</h3>
+      <p>Only the merchant signs in. Data-dense RTL-capable shell with a persistent right sidebar.</p>
+
+      <div class="sw-section">
+        <div class="sw-section-label">Routes</div>
+        <div class="sw-chipset">
+          <div class="sw-chip">/admin</div>
+          <div class="sw-chip">/admin/orders</div>
+          <div class="sw-chip">/admin/products</div>
+          <div class="sw-chip new">/admin/categories</div>
+          <div class="sw-chip">/admin/contacts</div>
+          <div class="sw-chip">/admin/subscriptions</div>
+          <div class="sw-chip">/admin/funnel</div>
+          <div class="sw-chip">/admin/settings</div>
+        </div>
+      </div>
+
+      <div class="sw-section">
+        <div class="sw-section-label">Order handling</div>
+        <div class="sw-list">
+          <div class="sw-item"><b>COD</b><span>normal fulfillment</span></div>
+          <div class="sw-item"><b>InstaPay</b><span>proof visible; no approval gate</span></div>
+          <div class="sw-item"><b>Status</b><span>new → processing → shipped</span></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="sw-flow">
+    <div class="sw-flow-title">Primary order flow</div>
+    <div class="sw-flow-row">
+      <span class="sw-node">Product variant</span><span class="sw-sep">→</span>
+      <span class="sw-node">Anonymous cart</span><span class="sw-sep">→</span>
+      <span class="sw-node">Guest checkout</span><span class="sw-sep">→</span>
+      <span class="sw-node accent">Order snapshot</span><span class="sw-sep">→</span>
+      <span class="sw-node">Admin fulfillment</span>
+    </div>
+  </div>
+
+  <div class="sw-decisions">
+    <div class="options">
+      <div class="option" data-choice="foundation-approved" onclick="toggleSelect(this)">
+        <div class="letter">A</div>
+        <div class="content"><h3>Foundation looks right</h3><p>Keep this system boundary and refine the database next.</p></div>
+      </div>
+      <div class="option" data-choice="storefront-change" onclick="toggleSelect(this)">
+        <div class="letter">B</div>
+        <div class="content"><h3>Change the storefront map</h3><p>The public routes or shopping flow need adjustment.</p></div>
+      </div>
+      <div class="option" data-choice="admin-change" onclick="toggleSelect(this)">
+        <div class="letter">C</div>
+        <div class="content"><h3>Change the admin map</h3><p>The admin navigation or order workflow needs adjustment.</p></div>
+      </div>
+    </div>
+  </div>
+</div>

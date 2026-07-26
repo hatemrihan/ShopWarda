@@ -1,0 +1,302 @@
+/**
+ * Product Service — business logic layer.
+ * Enforces all product invariants before delegating to repository.
+ */
+
+import { productRepository } from './product.repository';
+import type { IProduct } from '@/lib/db/models/product.model';
+import {
+  createProductSchema,
+  updateProductSchema,
+  type CreateProductInput,
+  type UpdateProductInput,
+} from '../schemas';
+import type { ProductDTO, ProductListItem, ProductFilter, PaginationParams, PaginatedResult } from '../types';
+import { ValidationError, NotFoundError } from '@/lib/errors';
+import { invalidateProduct, invalidateProducts } from '@/lib/cache';
+import { categoryRepository } from './category.repository';
+
+// ─── Slug generation ────────────────────────────────────────────
+
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+async function ensureUniqueSlug(slug: string, excludeId?: string): Promise<string> {
+  let candidate = slug;
+  let attempt = 0;
+
+  while (await productRepository.isSlugTaken(candidate, excludeId)) {
+    attempt++;
+    candidate = `${slug}-${attempt}`;
+  }
+
+  return candidate;
+}
+
+// ─── Invariant Checks ───────────────────────────────────────────
+
+/**
+ * Invariant #1: No two variants share identical optionValues.
+ */
+function checkVariantUniqueness(variants: CreateProductInput['variants']) {
+  const signatures = new Set<string>();
+
+  for (const v of variants) {
+    const sig = v.optionValues
+      .map((ov) => `${ov.name}:${ov.value}`)
+      .sort()
+      .join('|');
+
+    if (signatures.has(sig)) {
+      throw new ValidationError('Duplicate variant option combination', {
+        variants: [`Two variants have identical options: ${sig || '(no options)'}`],
+      });
+    }
+    signatures.add(sig);
+  }
+}
+
+/**
+ * Validate categories exist and are active.
+ */
+async function validateCategoryIds(categoryIds: string[]): Promise<void> {
+  for (const catId of categoryIds) {
+    const cat = await categoryRepository.findById(catId);
+    if (!cat || cat.status === 'archived') {
+      throw new ValidationError(`Category ${catId} not found or archived`, {
+        categoryIds: ['One or more categories are invalid'],
+      });
+    }
+  }
+}
+
+// ─── Service ────────────────────────────────────────────────────
+
+export const productService = {
+  async list(
+    filter: ProductFilter = {},
+    pagination?: PaginationParams
+  ): Promise<PaginatedResult<ProductListItem>> {
+    return productRepository.findAll(filter, pagination);
+  },
+
+  async getById(id: string): Promise<ProductDTO> {
+    const product = await productRepository.findById(id);
+    if (!product) throw new NotFoundError('Product', id);
+    return product;
+  },
+
+  async getBySlug(slug: string): Promise<ProductDTO> {
+    const product = await productRepository.findBySlug(slug);
+    if (product) return product;
+
+    const newSlug = await productRepository.findByPreviousSlug(slug);
+    if (newSlug) {
+      throw Object.assign(new NotFoundError('Product', slug), { redirectSlug: newSlug });
+    }
+
+    throw new NotFoundError('Product', slug);
+  },
+
+  async create(input: CreateProductInput): Promise<ProductDTO> {
+    const parsed = createProductSchema.safeParse(input);
+    if (!parsed.success) {
+      const details: Record<string, string[]> = {};
+      for (const issue of parsed.error.issues) {
+        const path = issue.path.join('.');
+        details[path] = details[path] ?? [];
+        details[path].push(issue.message);
+      }
+      console.error('[ProductService] Validation failed:', JSON.stringify(details, null, 2));
+      console.error('[ProductService] Input keys:', Object.keys(input));
+      console.error('[ProductService] Variants:', JSON.stringify(input.variants?.map(v => ({ sku: v.sku, price: v.pricePiasters, compareAt: v.compareAtPricePiasters, isDefault: v.isDefault })), null, 2));
+      if (input.media) console.error('[ProductService] Media:', JSON.stringify(input.media, null, 2));
+      throw new ValidationError('Invalid product data', details);
+    }
+
+    const data = parsed.data;
+
+    // Validate categories
+    await validateCategoryIds(data.categoryIds);
+
+    // Invariant #1: variant uniqueness
+    checkVariantUniqueness(data.variants);
+
+    // Generate slug
+    const rawSlug = data.slug || generateSlug(data.name);
+    const slug = await ensureUniqueSlug(rawSlug);
+
+    // Map to Mongoose schema shape
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const productData: Record<string, any> = {
+      name: data.name,
+      slug,
+      description: data.description,
+      shortDescription: data.shortDescription,
+      type: data.type,
+      categoryIds: data.categoryIds,
+      primaryCategoryId: data.categoryIds[0],
+      status: data.status,
+      options: data.options?.map((o, i) => ({
+        key: o.name.toLowerCase().replace(/\s+/g, '-'),
+        label: o.name,
+        sortOrder: i,
+        values: o.values.map((v, vi) => ({
+          key: v.toLowerCase().replace(/\s+/g, '-'),
+          label: v,
+          sortOrder: vi,
+        })),
+      })) ?? [],
+      variants: data.variants.map((v) => ({
+        sku: v.sku,
+        optionValues: v.optionValues.map((ov) => ({
+          optionKey: ov.name.toLowerCase().replace(/\s+/g, '-'),
+          valueKey: ov.value.toLowerCase().replace(/\s+/g, '-'),
+        })),
+        priceMinor: v.pricePiasters,
+        compareAtPriceMinor: v.compareAtPricePiasters,
+        costPriceMinor: v.costPiasters,
+        stock: v.stock,
+        lowStockThreshold: v.lowStockThreshold,
+        weightGrams: v.weight,
+        status: v.isActive ? 'active' : 'inactive',
+      })),
+      media: data.media?.map((m, i) => ({
+        assetKey: m.assetKey,
+        publicUrl: m.url,
+        alt: m.alt ?? '',
+        width: m.width ?? 0,
+        height: m.height ?? 0,
+        sortOrder: i,
+        type: m.type,
+      })) ?? [],
+      bundleItems: data.bundleItems ?? [],
+      seo: data.seo ? {
+        title: data.seo.title,
+        description: data.seo.description,
+      } : undefined,
+    };
+
+    const product = await productRepository.create(productData as Partial<IProduct>);
+
+    invalidateProducts();
+    return product;
+  },
+
+  async update(input: UpdateProductInput): Promise<ProductDTO> {
+    const parsed = updateProductSchema.safeParse(input);
+    if (!parsed.success) {
+      const details: Record<string, string[]> = {};
+      for (const issue of parsed.error.issues) {
+        const path = issue.path.join('.');
+        details[path] = details[path] ?? [];
+        details[path].push(issue.message);
+      }
+      throw new ValidationError('Invalid product data', details);
+    }
+
+    const data = parsed.data;
+    const existing = await productRepository.findById(data.id);
+    if (!existing) throw new NotFoundError('Product', data.id);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updateData: Record<string, any> = {};
+
+    // Handle slug change
+    if (data.slug && data.slug !== existing.slug) {
+      const newSlug = await ensureUniqueSlug(data.slug, data.id);
+      updateData.slug = newSlug;
+      updateData.$push = { previousSlugs: existing.slug };
+    } else if (data.name && data.name !== existing.name && !data.slug) {
+      const rawSlug = generateSlug(data.name);
+      if (rawSlug !== existing.slug) {
+        const newSlug = await ensureUniqueSlug(rawSlug, data.id);
+        updateData.slug = newSlug;
+        updateData.$push = { previousSlugs: existing.slug };
+      }
+    }
+
+    // Validate categories
+    if (data.categoryIds) {
+      await validateCategoryIds(data.categoryIds);
+      updateData.categoryIds = data.categoryIds;
+      updateData.primaryCategoryId = data.categoryIds[0];
+    }
+
+    // Variant uniqueness check
+    if (data.variants) {
+      checkVariantUniqueness(data.variants);
+      updateData.variants = data.variants.map((v) => ({
+        sku: v.sku,
+        optionValues: v.optionValues.map((ov) => ({
+          optionKey: ov.name.toLowerCase().replace(/\s+/g, '-'),
+          valueKey: ov.value.toLowerCase().replace(/\s+/g, '-'),
+        })),
+        priceMinor: v.pricePiasters,
+        compareAtPriceMinor: v.compareAtPricePiasters,
+        stock: v.stock,
+        lowStockThreshold: v.lowStockThreshold,
+        weightGrams: v.weight,
+        status: v.isActive ? 'active' : 'inactive',
+      }));
+    }
+
+    if (data.name) updateData.name = data.name;
+    if (data.description !== undefined) updateData.description = data.description;
+    if (data.shortDescription !== undefined) updateData.shortDescription = data.shortDescription;
+    if (data.options) {
+      updateData.options = data.options.map((o, i) => ({
+        key: o.name.toLowerCase().replace(/\s+/g, '-'),
+        label: o.name,
+        sortOrder: i,
+        values: o.values.map((v, vi) => ({
+          key: v.toLowerCase().replace(/\s+/g, '-'),
+          label: v,
+          sortOrder: vi,
+        })),
+      }));
+    }
+    if (data.media) {
+      updateData.media = data.media.map((m, i) => ({
+        assetKey: m.assetKey,
+        publicUrl: m.url,
+        alt: m.alt ?? '',
+        width: m.width ?? 0,
+        height: m.height ?? 0,
+        sortOrder: i,
+        type: m.type,
+      }));
+    }
+    if (data.status) updateData.status = data.status;
+    if (data.seo) updateData.seo = data.seo;
+    if (data.bundleItems) updateData.bundleItems = data.bundleItems;
+
+    const updated = await productRepository.update(data.id, updateData);
+    if (!updated) throw new NotFoundError('Product', data.id);
+
+    invalidateProduct(updated.slug);
+    return updated;
+  },
+
+  async archive(id: string): Promise<void> {
+    const existing = await productRepository.findById(id);
+    if (!existing) throw new NotFoundError('Product', id);
+
+    await productRepository.archive(id);
+    invalidateProduct(existing.slug);
+  },
+
+  async getByCategory(categoryId: string, pagination?: PaginationParams) {
+    return productRepository.findByCategory(categoryId, pagination);
+  },
+
+  async getDashboardStats() {
+    return productRepository.getCounts();
+  },
+};

@@ -1,0 +1,238 @@
+<style>
+  :root{--db-blue:#69a7ff;--db-border:#353532;--db-panel:#181817;--db-soft:#21211f;--db-muted:#85857f;--db-green:#73d29a;--db-amber:#e4b96a}
+  .db-kicker{color:var(--db-blue);text-transform:uppercase;letter-spacing:.18em;font-size:11px;font-weight:800}
+  .db-title{margin:8px 0 6px}.db-sub{max-width:1050px}
+  .principles{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin:22px 0}
+  .principle{border:1px solid var(--db-border);background:var(--db-panel);border-radius:12px;padding:12px}.principle strong{display:block;font-size:11px;margin-bottom:5px}.principle span{font-size:10px;line-height:1.45;color:var(--db-muted)}
+  .section{border:1px solid var(--db-border);background:var(--db-panel);border-radius:18px;padding:20px;margin:17px 0}
+  .section-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:16px}.section-head h3{margin:0 0 5px;font-size:18px}.section-head p{margin:0;color:var(--db-muted);font-size:11px}.badge{border:1px solid #3569aa;color:#a8cbff;background:#17243a;border-radius:999px;padding:6px 9px;font-size:9px;white-space:nowrap}
+  .erd{display:grid;grid-template-columns:1fr 48px 1.25fr 48px 1fr;gap:9px;align-items:stretch}
+  .entity{border:1px solid #3a3a36;background:var(--db-soft);border-radius:13px;padding:13px}.entity.primary{border-color:#3569aa;background:#182438}.entity h4{margin:0 0 7px;font-size:12px}.entity p{margin:0;color:var(--db-muted);font-size:10px;line-height:1.5}.entity .relation{display:inline-block;margin-top:9px;padding:4px 6px;border-radius:6px;background:#171716;border:1px solid #353532;color:#a8a8a2;font-size:9px;font-family:ui-monospace,monospace}.arrow{display:flex;align-items:center;justify-content:center;color:var(--db-blue);font-size:18px}.embed{border-left:2px solid #3569aa;margin-top:10px;padding-left:9px;color:#9fc5fc!important}
+  .schema-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:13px}.schema-card{border:1px solid #343431;background:#151514;border-radius:14px;overflow:hidden}.schema-card.wide{grid-column:1/-1}.schema-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid #30302d;background:#1f1f1d}.schema-card-head strong{font-size:12px}.kind{font-size:8px;color:#8fbcff;text-transform:uppercase;letter-spacing:.12em}.fields{display:grid;grid-template-columns:1fr 1fr;gap:0}.field{display:grid;grid-template-columns:130px 1fr;gap:9px;padding:8px 11px;border-bottom:1px solid #292927;min-width:0}.field:nth-child(odd){border-right:1px solid #292927}.field code{color:#9fc5fc;font-size:9.5px;overflow-wrap:anywhere}.field span{color:#7e7e78;font-size:9.5px;line-height:1.35}.field b{color:#d7d7d1;font-weight:600}.subschema{padding:12px;border-top:1px solid #30302d}.subschema-title{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:#73736d;font-weight:800;margin-bottom:9px}.subschema-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.subfield{border:1px solid #30302d;background:#1d1d1b;border-radius:8px;padding:8px}.subfield strong{display:block;color:#d0d0ca;font-size:9.5px;margin-bottom:4px}.subfield span{color:#777771;font-size:8.5px;line-height:1.35}
+  .support-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:9px}.support{border:1px solid #343431;background:var(--db-soft);border-radius:11px;padding:11px}.support strong{display:block;font-size:10px;margin-bottom:5px;color:#e5e5df}.support span{font-size:9px;color:#777771;line-height:1.45}.support code{color:#91bcf9;font-size:8.5px}
+  .index-table{display:grid;grid-template-columns:125px 1.2fr 1fr;gap:0;border:1px solid #343431;border-radius:12px;overflow:hidden}.idx{display:contents}.idx>*{padding:9px 11px;border-bottom:1px solid #2f2f2c;font-size:9.5px}.idx .collection{color:#e0e0da;font-weight:700;background:#20201e}.idx code{color:#94bffb;background:#171716;overflow-wrap:anywhere}.idx span{color:#7d7d77;background:#1b1b1a}.idx.head>*{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:#71716b;font-weight:800;background:#222220}
+  .states{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.state-card{border:1px solid #343431;background:#20201e;border-radius:11px;padding:11px}.state-card strong{display:block;font-size:10px;margin-bottom:8px}.state-flow{display:flex;align-items:center;gap:5px;flex-wrap:wrap}.state{border:1px solid #3b3b37;background:#171716;border-radius:6px;padding:4px 6px;color:#aaa9a3;font-size:8.5px}.state.good{border-color:#2f6c49;color:#8ce0ad;background:#17271e}.state.warn{border-color:#715827;color:#edc77c;background:#292318}.state-arrow{color:#575751;font-size:9px}
+  .invariants{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.invariant{display:flex;gap:9px;border:1px solid #343431;background:#20201e;border-radius:10px;padding:10px}.num{display:flex;align-items:center;justify-content:center;min-width:22px;height:22px;border-radius:7px;background:#17243a;border:1px solid #3569aa;color:#9bc3ff;font-size:9px;font-weight:800}.invariant strong{display:block;font-size:9.5px;margin-bottom:3px}.invariant span{display:block;color:#7c7c76;font-size:8.8px;line-height:1.4}
+  .note{margin:18px 0;color:#878781;font-size:11px}
+  @media(max-width:1000px){.principles{grid-template-columns:1fr 1fr}.erd{grid-template-columns:1fr}.arrow{transform:rotate(90deg);min-height:24px}.support-grid{grid-template-columns:1fr 1fr}.states{grid-template-columns:1fr 1fr}}
+  @media(max-width:760px){.schema-grid,.principles,.states,.invariants{grid-template-columns:1fr}.fields{grid-template-columns:1fr}.field:nth-child(odd){border-right:0}.subschema-grid,.support-grid{grid-template-columns:1fr}.index-table{grid-template-columns:95px 1fr}.idx span{display:none}}
+</style>
+
+<div class="db-kicker">ShopWarda · Database Design 02</div>
+<h2 class="db-title">MongoDB schema designed around commerce invariants—not page forms</h2>
+<p class="subtitle db-sub">Products own bounded variants and media; carts reference live variants; orders copy immutable snapshots. There is intentionally no Customer collection.</p>
+
+<div class="principles">
+  <div class="principle"><strong>Embed what changes together</strong><span>Variants, option definitions, and product media are edited atomically inside Product.</span></div>
+  <div class="principle"><strong>Reference what grows independently</strong><span>Categories, carts, orders, messages, subscribers, events, and logs are separate collections.</span></div>
+  <div class="principle"><strong>Snapshot commercial history</strong><span>Order names, SKUs, options, images, prices, address, and totals never depend on future product edits.</span></div>
+  <div class="principle"><strong>Archive instead of delete</strong><span>Published products, categories, and orders keep stable history and URLs.</span></div>
+</div>
+
+<section class="section">
+  <div class="section-head"><div><h3>1. Relationship map</h3><p>References are one-way to avoid unbounded arrays and circular writes.</p></div><span class="badge">10 collections</span></div>
+  <div class="erd">
+    <div class="entity"><h4>Category</h4><p>Taxonomy, display order, SEO, optional parent.</p><span class="relation">1 category → many products</span></div>
+    <div class="arrow">→</div>
+    <div class="entity primary"><h4>Product</h4><p>Content, category references, option definitions, media, and derived price range.</p><p class="embed">Embeds Variant[] and Media[] because their lifecycle belongs to one product.</p></div>
+    <div class="arrow">→</div>
+    <div class="entity"><h4>Cart</h4><p>References live product/variant IDs; current price and stock are recalculated.</p><span class="relation">cart → checkout transaction</span></div>
+  </div>
+  <div class="erd" style="margin-top:10px">
+    <div class="entity"><h4>Admin</h4><p>Only authenticated identity in the system.</p><span class="relation">admin → audit logs</span></div>
+    <div class="arrow">→</div>
+    <div class="entity primary"><h4>Order</h4><p>Guest details, address, item snapshots, payment proof, pricing, status history.</p><p class="embed">Keeps optional source IDs for reporting, but renders correctly if a product is archived.</p></div>
+    <div class="arrow">←</div>
+    <div class="entity"><h4>Store operations</h4><p>Contact, Subscriber, Settings, AnalyticsEvent, AuditLog.</p><span class="relation">independent bounded collections</span></div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head"><div><h3>2. Catalog documents</h3><p>Flexible colors/sizes/materials without turning every product into a different schema.</p></div><span class="badge">Category + Product</span></div>
+  <div class="schema-grid">
+    <article class="schema-card">
+      <div class="schema-card-head"><strong>categories</strong><span class="kind">collection</span></div>
+      <div class="fields">
+        <div class="field"><code>_id</code><span><b>ObjectId</b> stable identity</span></div>
+        <div class="field"><code>name</code><span>display name</span></div>
+        <div class="field"><code>slug</code><span>unique URL segment</span></div>
+        <div class="field"><code>previousSlugs[]</code><span>safe redirects after rename</span></div>
+        <div class="field"><code>description</code><span>optional category copy</span></div>
+        <div class="field"><code>image</code><span>asset key, URL, alt, dimensions</span></div>
+        <div class="field"><code>parentId?</code><span>optional nested category</span></div>
+        <div class="field"><code>sortOrder</code><span>admin-controlled ordering</span></div>
+        <div class="field"><code>status</code><span>active | hidden | archived</span></div>
+        <div class="field"><code>seo</code><span>title, description, OG image</span></div>
+        <div class="field"><code>createdAt / updatedAt</code><span>timestamps</span></div>
+      </div>
+    </article>
+
+    <article class="schema-card">
+      <div class="schema-card-head"><strong>products</strong><span class="kind">collection</span></div>
+      <div class="fields">
+        <div class="field"><code>_id</code><span><b>ObjectId</b> stable identity</span></div>
+        <div class="field"><code>name / slug</code><span>unique public identity</span></div>
+        <div class="field"><code>previousSlugs[]</code><span>redirect-safe renames</span></div>
+        <div class="field"><code>shortDescription</code><span>cards and metadata</span></div>
+        <div class="field"><code>description</code><span>rich product content</span></div>
+        <div class="field"><code>categoryIds[]</code><span>many-category membership</span></div>
+        <div class="field"><code>primaryCategoryId</code><span>canonical breadcrumb</span></div>
+        <div class="field"><code>tags[]</code><span>search/filter labels</span></div>
+        <div class="field"><code>status</code><span>draft | active | archived</span></div>
+        <div class="field"><code>options[]</code><span>Color, Size, Material definitions</span></div>
+        <div class="field"><code>variants[]</code><span>embedded purchasable combinations</span></div>
+        <div class="field"><code>media[]</code><span>embedded ordered gallery</span></div>
+        <div class="field"><code>defaultVariantId</code><span>default selection</span></div>
+        <div class="field"><code>priceRange</code><span>derived min/max integer piasters</span></div>
+        <div class="field"><code>seo</code><span>title, description, canonical, OG</span></div>
+        <div class="field"><code>publishedAt</code><span>first activation time</span></div>
+        <div class="field"><code>createdAt / updatedAt</code><span>timestamps</span></div>
+      </div>
+    </article>
+
+    <article class="schema-card wide">
+      <div class="schema-card-head"><strong>Embedded product structures</strong><span class="kind">bounded subdocuments</span></div>
+      <div class="subschema">
+        <div class="subschema-title">Variant — the actual sellable SKU</div>
+        <div class="subschema-grid">
+          <div class="subfield"><strong>_id · sku</strong><span>Stable embedded ObjectId; SKU unique store-wide.</span></div>
+          <div class="subfield"><strong>optionValues[]</strong><span>{ optionKey: "color", valueKey: "black" } pairs.</span></div>
+          <div class="subfield"><strong>priceMinor</strong><span>Required EGP price in integer piasters.</span></div>
+          <div class="subfield"><strong>compareAtPriceMinor?</strong><span>Optional original price; must exceed current price.</span></div>
+          <div class="subfield"><strong>stock</strong><span>Non-negative available units; conditional checkout decrement.</span></div>
+          <div class="subfield"><strong>lowStockThreshold</strong><span>Dashboard alert threshold.</span></div>
+          <div class="subfield"><strong>trackInventory</strong><span>Allows non-stock-tracked products without fake quantities.</span></div>
+          <div class="subfield"><strong>weightGrams?</strong><span>Future shipping calculation input.</span></div>
+          <div class="subfield"><strong>mediaKeys[]</strong><span>Variant-specific images, usually mapped to a color.</span></div>
+          <div class="subfield"><strong>status</strong><span>active | disabled; disabled variants cannot enter cart.</span></div>
+        </div>
+      </div>
+      <div class="subschema">
+        <div class="subschema-title">OptionDefinition + ProductMedia</div>
+        <div class="subschema-grid">
+          <div class="subfield"><strong>OptionDefinition</strong><span>key, label, sortOrder, values[]. Generic for Color/Size/etc.</span></div>
+          <div class="subfield"><strong>OptionValue</strong><span>key, label, swatchHex?, sortOrder. Swatches only when relevant.</span></div>
+          <div class="subfield"><strong>ProductMedia</strong><span>assetKey, publicUrl, alt, width, height, sortOrder, optionValueKey?.</span></div>
+        </div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head"><div><h3>3. Cart and order documents</h3><p>The cart follows live catalog data; the order becomes permanent evidence.</p></div><span class="badge">Anonymous commerce</span></div>
+  <div class="schema-grid">
+    <article class="schema-card">
+      <div class="schema-card-head"><strong>carts</strong><span class="kind">collection + TTL</span></div>
+      <div class="fields">
+        <div class="field"><code>_id</code><span>internal ObjectId</span></div>
+        <div class="field"><code>tokenHash</code><span>unique hash of 256-bit cookie token</span></div>
+        <div class="field"><code>status</code><span>active | converted | expired</span></div>
+        <div class="field"><code>items[]</code><span>productId, variantId, quantity, addedAt</span></div>
+        <div class="field"><code>version</code><span>optimistic concurrency counter</span></div>
+        <div class="field"><code>lastActivityAt</code><span>expiry extension point</span></div>
+        <div class="field"><code>expiresAt</code><span>TTL deletion date</span></div>
+        <div class="field"><code>createdAt / updatedAt</code><span>timestamps</span></div>
+      </div>
+      <div class="subschema"><div class="subschema-title">Cart rule</div><div class="subfield"><strong>No trusted totals in Cart</strong><span>Every read returns canonical price/availability; checkout validates once again inside the transaction.</span></div></div>
+    </article>
+
+    <article class="schema-card">
+      <div class="schema-card-head"><strong>orders</strong><span class="kind">immutable commercial record</span></div>
+      <div class="fields">
+        <div class="field"><code>_id / orderNumber</code><span>ObjectId + human reference</span></div>
+        <div class="field"><code>idempotencyKeyHash</code><span>prevents duplicate checkout</span></div>
+        <div class="field"><code>sourceCartId</code><span>traceability only</span></div>
+        <div class="field"><code>guest</code><span>name, phone, optional email</span></div>
+        <div class="field"><code>address</code><span>Egypt governorate/city/area/street details</span></div>
+        <div class="field"><code>items[]</code><span>immutable Product/Variant snapshots</span></div>
+        <div class="field"><code>pricing</code><span>subtotal, discount, shipping, total, EGP</span></div>
+        <div class="field"><code>payment</code><span>COD or InstaPay + private proof metadata</span></div>
+        <div class="field"><code>status</code><span>fulfillment lifecycle</span></div>
+        <div class="field"><code>statusHistory[]</code><span>status, at, adminId?, note?</span></div>
+        <div class="field"><code>customerNote?</code><span>checkout note</span></div>
+        <div class="field"><code>adminNote?</code><span>private operations note</span></div>
+        <div class="field"><code>createdAt / updatedAt</code><span>timestamps</span></div>
+      </div>
+    </article>
+
+    <article class="schema-card wide">
+      <div class="schema-card-head"><strong>Embedded order structures</strong><span class="kind">snapshots</span></div>
+      <div class="subschema-grid" style="padding:12px">
+        <div class="subfield"><strong>OrderItem</strong><span>source IDs, SKU, product name/slug, selected options, image URL, quantity, unitPriceMinor, lineTotalMinor.</span></div>
+        <div class="subfield"><strong>EgyptAddress</strong><span>governorate, city, area, street, building, floor?, apartment?, landmark?, postalCode?.</span></div>
+        <div class="subfield"><strong>Pricing</strong><span>subtotalMinor, discountMinor, shippingMinor, totalMinor, currency: EGP. Server-computed only.</span></div>
+        <div class="subfield"><strong>Payment</strong><span>method, status, InstaPay assetKey/mime/size/uploadedAt. No separate approval gate.</span></div>
+        <div class="subfield"><strong>Fulfillment history</strong><span>Append-only transition log; cancelling restores stock exactly once.</span></div>
+        <div class="subfield"><strong>Order source</strong><span>UTM/anonymous session references may be stored without customer PII for funnel reporting.</span></div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head"><div><h3>4. Supporting collections</h3><p>Small, independently growing data sets with focused retention rules.</p></div><span class="badge">Operations + growth</span></div>
+  <div class="support-grid">
+    <div class="support"><strong>admins</strong><span><code>emailNormalized</code>, passwordHash, displayName, role, isActive, lastLoginAt, timestamps.</span></div>
+    <div class="support"><strong>contacts</strong><span>name, phone?, email?, subject?, message, status, adminNote?, createdAt.</span></div>
+    <div class="support"><strong>subscribers</strong><span>emailNormalized, status, source, consentAt, unsubscribedAt?, timestamps.</span></div>
+    <div class="support"><strong>storeSettings</strong><span>singleton key, store contact, InstaPay link/instructions, governorate shipping zones, free-delivery threshold, public analytics IDs.</span></div>
+    <div class="support"><strong>analyticsEvents</strong><span>eventId, anonymousSessionId, event, entity refs, safe properties, UTM/referrer, occurredAt, expiresAt.</span></div>
+    <div class="support"><strong>auditLogs</strong><span>adminId, action, entityType, entityId, safe summary, request metadata, createdAt. Append-only.</span></div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head"><div><h3>5. Index plan</h3><p>Indexes correspond to actual storefront/admin queries—not speculative fields.</p></div><span class="badge">Query-driven</span></div>
+  <div class="index-table">
+    <div class="idx head"><div>Collection</div><div>Index</div><div>Purpose</div></div>
+    <div class="idx"><div class="collection">categories</div><code>{ slug: 1 } unique</code><span>Resolve /categories/[slug]</span></div>
+    <div class="idx"><div class="collection">categories</div><code>{ parentId: 1, sortOrder: 1, status: 1 }</code><span>Ordered category navigation</span></div>
+    <div class="idx"><div class="collection">products</div><code>{ slug: 1 } unique</code><span>Product page lookup</span></div>
+    <div class="idx"><div class="collection">products</div><code>{ "variants.sku": 1 } unique</code><span>Store-wide SKU safety</span></div>
+    <div class="idx"><div class="collection">products</div><code>{ status: 1, categoryIds: 1, "priceRange.minMinor": 1 }</code><span>Shop/category filters</span></div>
+    <div class="idx"><div class="collection">carts</div><code>{ tokenHash: 1 } unique</code><span>Secure cookie resolution</span></div>
+    <div class="idx"><div class="collection">carts</div><code>{ expiresAt: 1 } TTL</code><span>Automatic abandoned cart cleanup</span></div>
+    <div class="idx"><div class="collection">orders</div><code>{ orderNumber: 1 } unique</code><span>Human order lookup</span></div>
+    <div class="idx"><div class="collection">orders</div><code>{ idempotencyKeyHash: 1 } unique</code><span>Duplicate submission protection</span></div>
+    <div class="idx"><div class="collection">orders</div><code>{ status: 1, createdAt: -1 }</code><span>Admin order queue</span></div>
+    <div class="idx"><div class="collection">orders</div><code>{ "guest.phone": 1, createdAt: -1 }</code><span>Phone search</span></div>
+    <div class="idx"><div class="collection">subscribers</div><code>{ emailNormalized: 1 } unique</code><span>Idempotent subscription</span></div>
+    <div class="idx"><div class="collection">contacts</div><code>{ status: 1, createdAt: -1 }</code><span>Inbox workflow</span></div>
+    <div class="idx"><div class="collection">analyticsEvents</div><code>{ anonymousSessionId: 1, occurredAt: 1 }</code><span>Funnel reconstruction</span></div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head"><div><h3>6. Lifecycles and invariants</h3><p>State transitions happen in services; clients never assign arbitrary statuses.</p></div><span class="badge">Enforced server-side</span></div>
+  <div class="states">
+    <div class="state-card"><strong>Product</strong><div class="state-flow"><span class="state">draft</span><span class="state-arrow">→</span><span class="state good">active</span><span class="state-arrow">→</span><span class="state">archived</span></div></div>
+    <div class="state-card"><strong>Cart</strong><div class="state-flow"><span class="state good">active</span><span class="state-arrow">→</span><span class="state">converted</span><span class="state-arrow">or</span><span class="state">expired</span></div></div>
+    <div class="state-card"><strong>Order</strong><div class="state-flow"><span class="state warn">new</span><span class="state-arrow">→</span><span class="state">processing</span><span class="state-arrow">→</span><span class="state">shipped</span><span class="state-arrow">→</span><span class="state good">delivered</span></div></div>
+    <div class="state-card"><strong>Payment</strong><div class="state-flow"><span class="state">COD due</span><span class="state-arrow">→</span><span class="state good">collected</span><span class="state-arrow">·</span><span class="state warn">proof uploaded</span></div></div>
+  </div>
+  <div class="invariants" style="margin-top:12px">
+    <div class="invariant"><span class="num">1</span><div><strong>Unique variant combination</strong><span>No two variants may select the same option values.</span></div></div>
+    <div class="invariant"><span class="num">2</span><div><strong>One default active variant</strong><span>Every active product has exactly one purchasable default.</span></div></div>
+    <div class="invariant"><span class="num">3</span><div><strong>Integer money only</strong><span>Prices and totals are non-negative piasters; compare-at exceeds price.</span></div></div>
+    <div class="invariant"><span class="num">4</span><div><strong>Stock never below zero</strong><span>Conditional transaction updates reject overselling.</span></div></div>
+    <div class="invariant"><span class="num">5</span><div><strong>Checkout ignores client totals</strong><span>Server rebuilds totals from current variants and shipping settings.</span></div></div>
+    <div class="invariant"><span class="num">6</span><div><strong>Orders are never deleted</strong><span>Cancellation appends history and restores stock idempotently.</span></div></div>
+    <div class="invariant"><span class="num">7</span><div><strong>Category trees cannot cycle</strong><span>A category cannot parent itself or one of its descendants.</span></div></div>
+    <div class="invariant"><span class="num">8</span><div><strong>Proof assets are private</strong><span>MIME, size, and signed access are enforced server-side.</span></div></div>
+    <div class="invariant"><span class="num">9</span><div><strong>Public analytics contain no PII</strong><span>Funnel events use anonymous IDs; order/customer data stays in Orders.</span></div></div>
+  </div>
+</section>
+
+<p class="note">This model supports colors, sizes, future option types, category routes, live carts, image replacement, order history, Egyptian shipping, and InstaPay proof without creating a customer-account system.</p>
+<div class="options">
+  <div class="option" data-choice="database-approved" onclick="toggleSelect(this)">
+    <div class="letter">A</div><div class="content"><h3>Approve the database design</h3><p>Lock these collection boundaries and continue to end-to-end flows, errors, and testing.</p></div>
+  </div>
+  <div class="option" data-choice="database-catalog-revise" onclick="toggleSelect(this)">
+    <div class="letter">B</div><div class="content"><h3>Revise catalog or variants</h3><p>Change category, product, color, size, stock, pricing, or media behavior.</p></div>
+  </div>
+  <div class="option" data-choice="database-order-revise" onclick="toggleSelect(this)">
+    <div class="letter">C</div><div class="content"><h3>Revise cart or orders</h3><p>Change cart persistence, checkout fields, payment, shipping, or order states.</p></div>
+  </div>
+</div>

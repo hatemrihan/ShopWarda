@@ -1,0 +1,311 @@
+<style>
+  :root { --sw-blue:#64a3ff; --sw-border:#353532; --sw-panel:#181817; --sw-soft:#222220; --sw-muted:#85857f; }
+  .arch-kicker{color:var(--sw-blue);text-transform:uppercase;letter-spacing:.18em;font-size:11px;font-weight:800}
+  .arch-title{margin:8px 0 6px;max-width:980px}
+  .arch-sub{max-width:1050px}
+  .verdict{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:24px 0}
+  .verdict-card{background:var(--sw-panel);border:1px solid var(--sw-border);border-radius:15px;padding:16px}
+  .verdict-card.recommended{border-color:#3569aa;background:#17243a;box-shadow:inset 0 0 0 1px rgba(100,163,255,.1)}
+  .verdict-card .tag{display:inline-block;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#a4c8ff;border:1px solid #3569aa;border-radius:999px;padding:4px 7px;margin-bottom:10px}
+  .verdict-card h3{margin:0 0 7px;font-size:15px}.verdict-card p{margin:0;color:var(--sw-muted);font-size:12px;line-height:1.5}
+  .verdict-card ul{margin:11px 0 0;padding-left:17px;color:#aaa9a3;font-size:11px;line-height:1.55}
+  .section-card{background:var(--sw-panel);border:1px solid var(--sw-border);border-radius:18px;padding:20px;margin:18px 0}
+  .section-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:17px}
+  .section-head h3{margin:0 0 5px;font-size:19px}.section-head p{margin:0;color:var(--sw-muted);font-size:12px}
+  .step-badge{color:#a4c8ff;border:1px solid #3569aa;background:#17243a;border-radius:999px;padding:6px 9px;font-size:10px;white-space:nowrap}
+  .runtime{display:grid;grid-template-columns:1fr 44px 1.2fr 44px 1fr;align-items:stretch;gap:10px}
+  .runtime-box{background:var(--sw-soft);border:1px solid #3a3a36;border-radius:13px;padding:15px}
+  .runtime-box.core{border-color:#3569aa}.runtime-box h4{margin:0 0 9px;font-size:13px}.runtime-box p{color:var(--sw-muted);font-size:11px;line-height:1.5;margin:0}
+  .runtime-box .mini{display:grid;gap:6px;margin-top:11px}.runtime-box .mini span{border:1px solid #373733;border-radius:7px;padding:6px 8px;color:#b7b7b1;font-size:10px;background:#1b1b1a}
+  .arrow{display:flex;align-items:center;justify-content:center;color:var(--sw-blue);font-size:20px}
+  .rule{margin-top:13px;border-left:3px solid #3569aa;padding:10px 12px;background:#1b2230;color:#b8cbe6;font-size:11px;line-height:1.55;border-radius:0 8px 8px 0}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .tree-panel{background:#121211;border:1px solid #30302d;border-radius:13px;overflow:hidden}
+  .tree-label{padding:10px 13px;border-bottom:1px solid #30302d;color:#9b9b95;font-size:10px;text-transform:uppercase;letter-spacing:.12em;font-weight:800}
+  pre.tree{margin:0;padding:15px;color:#c9c9c3;font:10.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre;overflow:auto;max-height:650px}
+  .hl{color:#8fbcff}.file-note{color:#777771}
+  .routes{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  .route-group{background:#20201e;border:1px solid #343431;border-radius:12px;padding:14px}
+  .route-group h4{margin:0 0 10px;font-size:12px;color:#e6e6e1}.route-list{display:grid;gap:7px}
+  .route{display:grid;grid-template-columns:62px 1fr;gap:7px;align-items:center;font-size:10px}
+  .method{color:#797973;text-transform:uppercase;font-size:9px;font-weight:800}.path{font-family:ui-monospace,monospace;color:#9ec4ff;overflow-wrap:anywhere}
+  .models{display:grid;grid-template-columns:repeat(5,1fr);gap:9px}
+  .model{background:#20201e;border:1px solid #343431;border-radius:11px;padding:11px;min-width:0}.model strong{display:block;color:#ededE8;font-size:11px;margin-bottom:5px}.model span{display:block;color:#7d7d77;font-size:9.5px;line-height:1.45}
+  .flow{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:14px}.node{background:#222220;border:1px solid #393935;border-radius:8px;padding:7px 9px;font-size:10px;color:#bdbdb7}.node.accent{border-color:#3569aa;color:#a4c8ff;background:#17243a}.sep{color:#555550}
+  .rules-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.rule-card{background:#20201e;border:1px solid #343431;border-radius:11px;padding:12px}.rule-card strong{display:block;font-size:11px;margin-bottom:5px}.rule-card span{font-size:10px;color:#80807a;line-height:1.5}
+  .phases{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.phase{background:#20201e;border:1px solid #343431;border-radius:11px;padding:11px}.phase b{display:block;color:#8fbcff;font-size:9px;margin-bottom:5px}.phase strong{display:block;font-size:11px;margin-bottom:5px}.phase span{font-size:9.5px;color:#7d7d77;line-height:1.45}
+  .decision-note{margin:23px 0 12px;color:#85857f;font-size:12px}
+  @media(max-width:1050px){.verdict,.routes{grid-template-columns:1fr}.runtime{grid-template-columns:1fr}.arrow{transform:rotate(90deg);min-height:26px}.models{grid-template-columns:repeat(2,1fr)}.rules-grid,.phases{grid-template-columns:1fr 1fr}}
+  @media(max-width:760px){.two-col{grid-template-columns:1fr}.models,.rules-grid,.phases{grid-template-columns:1fr}}
+</style>
+
+<div class="arch-kicker">ShopWarda · Architecture Blueprint 01</div>
+<h2 class="arch-title">A modular commerce platform—clean enough for one developer, strong enough to grow</h2>
+<p class="subtitle arch-sub">The recommended design keeps the storefront, admin, backend-for-frontend, and MongoDB domain layer in one Next.js codebase. Boundaries are enforced by modules, not extra servers.</p>
+
+<div class="verdict">
+  <article class="verdict-card recommended">
+    <span class="tag">Recommended</span>
+    <h3>A · Next.js modular monolith</h3>
+    <p>App Router + Server Components + Server Actions/Route Handlers + Mongoose.</p>
+    <ul><li>One deployment and one type system</li><li>No internal HTTP calls from server pages</li><li>Modules can be extracted later</li></ul>
+  </article>
+  <article class="verdict-card">
+    <h3>B · Split Next.js + Express</h3>
+    <p>Classic MERN with a separate REST API and two deployable applications.</p>
+    <ul><li>Useful when mobile/external clients are imminent</li><li>More auth, CORS, API versioning, and operations</li><li>Premature for one storefront</li></ul>
+  </article>
+  <article class="verdict-card">
+    <h3>C · Microservices</h3>
+    <p>Separate catalog, order, inventory, and analytics services with events.</p>
+    <ul><li>Independent scaling</li><li>Distributed transactions and observability burden</li><li>Wrong size for ShopWarda v1</li></ul>
+  </article>
+</div>
+
+<section class="section-card">
+  <div class="section-head"><div><h3>1. Runtime architecture</h3><p>Next.js is the web application and backend-for-frontend; domain services own business rules.</p></div><span class="step-badge">One deployment</span></div>
+  <div class="runtime">
+    <div class="runtime-box"><h4>Browser</h4><p>Server-rendered pages with small interactive islands.</p><div class="mini"><span>Store navigation + filters</span><span>Optimistic cart + drawer</span><span>Admin tables + forms</span></div></div>
+    <div class="arrow">→</div>
+    <div class="runtime-box core"><h4>Next.js 16 application</h4><p>Pages read services directly. Mutations enter through Server Actions or focused Route Handlers.</p><div class="mini"><span>Storefront Server Components</span><span>Protected admin Server Components</span><span>Domain services + repositories</span><span>Cache tags + validation + authorization</span></div></div>
+    <div class="arrow">→</div>
+    <div class="runtime-box"><h4>Infrastructure</h4><p>Provider adapters keep external services replaceable.</p><div class="mini"><span>MongoDB Atlas / Mongoose</span><span>Private media storage</span><span>Google Analytics 4</span><span>Meta Pixel adapter later</span></div></div>
+  </div>
+  <div class="rule"><strong>Important:</strong> Server Components call domain services directly—never fetch ShopWarda's own API. Route Handlers exist only for browser APIs, uploads, auth callbacks, exports, and future webhooks.</div>
+</section>
+
+<section class="section-card">
+  <div class="section-head"><div><h3>2. Exact App Router structure</h3><p>Route groups organize layouts without changing URLs. The admin login is outside the protected panel layout.</p></div><span class="step-badge">src/ layout</span></div>
+  <div class="two-col">
+    <div class="tree-panel">
+      <div class="tree-label">src/app · pages and route handlers</div>
+      <pre class="tree"><span class="hl">src/app/</span>
+├── layout.tsx                 <span class="file-note"># html, body, providers</span>
+├── globals.css
+├── global-error.tsx
+├── not-found.tsx
+├── sitemap.ts
+├── robots.ts
+├── manifest.ts
+│
+├── <span class="hl">(store)/</span>                   <span class="file-note"># no URL segment</span>
+│   ├── layout.tsx             <span class="file-note"># header, nav, cart, footer</span>
+│   ├── page.tsx               <span class="file-note"># /</span>
+│   ├── shop/
+│   │   ├── page.tsx           <span class="file-note"># /shop</span>
+│   │   └── loading.tsx
+│   ├── categories/
+│   │   ├── page.tsx           <span class="file-note"># /categories</span>
+│   │   └── [slug]/
+│   │       ├── page.tsx       <span class="file-note"># /categories/[slug]</span>
+│   │       ├── loading.tsx
+│   │       └── not-found.tsx
+│   ├── product/[slug]/
+│   │   ├── page.tsx           <span class="file-note"># /product/[slug]</span>
+│   │   ├── loading.tsx
+│   │   └── not-found.tsx
+│   ├── search/page.tsx
+│   ├── cart/page.tsx
+│   ├── checkout/
+│   │   ├── page.tsx
+│   │   └── success/[orderNumber]/page.tsx
+│   ├── contact/page.tsx
+│   ├── subscribe/page.tsx
+│   ├── shipping/page.tsx
+│   ├── returns/page.tsx
+│   └── privacy/page.tsx
+│
+├── <span class="hl">admin/</span>
+│   ├── login/page.tsx         <span class="file-note"># no admin shell</span>
+│   └── (panel)/               <span class="file-note"># protected right sidebar</span>
+│       ├── layout.tsx
+│       ├── page.tsx           <span class="file-note"># /admin</span>
+│       ├── orders/
+│       │   ├── page.tsx
+│       │   └── [orderId]/page.tsx
+│       ├── products/
+│       │   ├── page.tsx
+│       │   ├── new/page.tsx
+│       │   └── [productId]/edit/page.tsx
+│       ├── categories/page.tsx
+│       ├── contacts/page.tsx
+│       ├── subscriptions/page.tsx
+│       ├── funnel/page.tsx
+│       └── settings/page.tsx
+│
+└── <span class="hl">api/</span>
+    ├── auth/[...nextauth]/route.ts
+    ├── cart/route.ts
+    ├── cart/items/route.ts
+    ├── cart/items/[variantId]/route.ts
+    ├── checkout/route.ts
+    ├── media/sign/route.ts
+    ├── analytics/events/route.ts
+    ├── admin/exports/orders/route.ts
+    ├── admin/exports/subscribers/route.ts
+    └── health/route.ts</pre>
+    </div>
+
+    <div class="tree-panel">
+      <div class="tree-label">src · domain modules and shared infrastructure</div>
+      <pre class="tree"><span class="hl">src/</span>
+├── proxy.ts                   <span class="file-note"># optimistic /admin redirect only</span>
+├── auth.ts                    <span class="file-note"># admin auth adapter</span>
+├── instrumentation.ts
+│
+├── <span class="hl">components/</span>
+│   ├── ui/                    <span class="file-note"># shadcn primitives only</span>
+│   ├── store/
+│   │   ├── site-header.tsx
+│   │   ├── desktop-nav.tsx
+│   │   ├── mobile-menu.tsx
+│   │   ├── cart-drawer.tsx
+│   │   └── site-footer.tsx
+│   ├── admin/
+│   │   ├── admin-shell.tsx
+│   │   ├── admin-sidebar.tsx
+│   │   ├── admin-header.tsx
+│   │   └── data-table.tsx
+│   └── shared/
+│       ├── money.tsx
+│       ├── empty-state.tsx
+│       └── image-gallery.tsx
+│
+├── <span class="hl">features/</span>
+│   ├── catalog/
+│   │   ├── components/
+│   │   ├── server/
+│   │   │   ├── product.model.ts
+│   │   │   ├── category.model.ts
+│   │   │   ├── catalog.repository.ts
+│   │   │   ├── catalog.service.ts
+│   │   │   └── catalog.actions.ts
+│   │   ├── schemas.ts
+│   │   └── types.ts
+│   ├── inventory/server/
+│   ├── cart/{components,server}/
+│   ├── checkout/{components,server}/
+│   ├── orders/{components,server}/
+│   ├── contacts/{components,server}/
+│   ├── subscriptions/{components,server}/
+│   ├── analytics/{components,server}/
+│   ├── settings/{components,server}/
+│   ├── admin-auth/server/
+│   └── media/{components,server}/
+│
+├── <span class="hl">lib/</span>
+│   ├── db/mongoose.ts         <span class="file-note"># lazy singleton</span>
+│   ├── env.ts
+│   ├── logger.ts
+│   ├── errors.ts
+│   ├── money/egp.ts
+│   ├── security/
+│   │   ├── rate-limit.ts
+│   │   ├── idempotency.ts
+│   │   └── request.ts
+│   └── storage/
+│       ├── provider.ts
+│       └── cloudinary.ts
+│
+├── config/
+│   ├── navigation.ts
+│   ├── admin-navigation.ts
+│   └── commerce.ts
+└── styles/
+    └── tokens.css
+
+<span class="hl">tests/</span>
+├── unit/                      <span class="file-note"># services + pricing</span>
+├── integration/               <span class="file-note"># Mongo + route handlers</span>
+└── e2e/                       <span class="file-note"># storefront + admin</span></pre>
+    </div>
+  </div>
+</section>
+
+<section class="section-card">
+  <div class="section-head"><div><h3>3. Route contract</h3><p>Pages are server-rendered; APIs are deliberately small and mutation-focused.</p></div><span class="step-badge">No duplicated API layer</span></div>
+  <div class="routes">
+    <div class="route-group"><h4>Store pages</h4><div class="route-list">
+      <div class="route"><span class="method">PAGE</span><span class="path">/ · /shop</span></div>
+      <div class="route"><span class="method">PAGE</span><span class="path">/categories</span></div>
+      <div class="route"><span class="method">PAGE</span><span class="path">/categories/[slug]</span></div>
+      <div class="route"><span class="method">PAGE</span><span class="path">/product/[slug]</span></div>
+      <div class="route"><span class="method">PAGE</span><span class="path">/search</span></div>
+      <div class="route"><span class="method">PAGE</span><span class="path">/cart · /checkout</span></div>
+      <div class="route"><span class="method">PAGE</span><span class="path">/contact · /subscribe</span></div>
+    </div></div>
+    <div class="route-group"><h4>Browser APIs</h4><div class="route-list">
+      <div class="route"><span class="method">GET</span><span class="path">/api/cart</span></div>
+      <div class="route"><span class="method">POST</span><span class="path">/api/cart/items</span></div>
+      <div class="route"><span class="method">PATCH</span><span class="path">/api/cart/items/[variantId]</span></div>
+      <div class="route"><span class="method">DELETE</span><span class="path">/api/cart/items/[variantId]</span></div>
+      <div class="route"><span class="method">POST</span><span class="path">/api/media/sign</span></div>
+      <div class="route"><span class="method">POST</span><span class="path">/api/checkout</span></div>
+      <div class="route"><span class="method">POST</span><span class="path">/api/analytics/events</span></div>
+    </div></div>
+    <div class="route-group"><h4>Admin mutations</h4><div class="route-list">
+      <div class="route"><span class="method">ACTION</span><span class="path">create/update/archive product</span></div>
+      <div class="route"><span class="method">ACTION</span><span class="path">replace/reorder product media</span></div>
+      <div class="route"><span class="method">ACTION</span><span class="path">create/update/order category</span></div>
+      <div class="route"><span class="method">ACTION</span><span class="path">change order fulfillment status</span></div>
+      <div class="route"><span class="method">ACTION</span><span class="path">archive contact/subscriber</span></div>
+      <div class="route"><span class="method">GET</span><span class="path">/api/admin/exports/*</span></div>
+    </div></div>
+  </div>
+</section>
+
+<section class="section-card">
+  <div class="section-head"><div><h3>4. MongoDB ownership</h3><p>No Customer collection. Orders preserve immutable snapshots even after products change.</p></div><span class="step-badge">10 collections</span></div>
+  <div class="models">
+    <div class="model"><strong>admins</strong><span>email, passwordHash, role, lastLoginAt</span></div>
+    <div class="model"><strong>categories</strong><span>name, slug, image, parentId?, sortOrder, active</span></div>
+    <div class="model"><strong>products</strong><span>content, SEO, media, embedded variants, SKUs, stock</span></div>
+    <div class="model"><strong>carts</strong><span>tokenHash, items, expiresAt TTL, version</span></div>
+    <div class="model"><strong>orders</strong><span>number, guest/address, item snapshots, totals, proof, status</span></div>
+    <div class="model"><strong>contacts</strong><span>name, phone/email, message, status, createdAt</span></div>
+    <div class="model"><strong>subscribers</strong><span>email/phone, consentAt, source, status</span></div>
+    <div class="model"><strong>storeSettings</strong><span>shipping zones, InstaPay, store identity, feature flags</span></div>
+    <div class="model"><strong>analyticsEvents</strong><span>anonymous session, event, product/order refs, createdAt</span></div>
+    <div class="model"><strong>auditLogs</strong><span>admin, action, entity, before/after summary, timestamp</span></div>
+  </div>
+  <div class="flow"><span class="node">Cart re-price</span><span class="sep">→</span><span class="node">Validate stock</span><span class="sep">→</span><span class="node accent">Mongo transaction</span><span class="sep">→</span><span class="node">Create order snapshot</span><span class="sep">+</span><span class="node">Decrement stock</span><span class="sep">+</span><span class="node">Consume cart</span></div>
+</section>
+
+<section class="section-card">
+  <div class="section-head"><div><h3>5. Non-negotiable architecture rules</h3><p>These rules keep the codebase fast, secure, and understandable.</p></div><span class="step-badge">Guardrails</span></div>
+  <div class="rules-grid">
+    <div class="rule-card"><strong>Anonymous cart authority</strong><span>Opaque HttpOnly cookie + Mongo TTL. Optimistic UI mirrors the server; BroadcastChannel syncs tabs.</span></div>
+    <div class="rule-card"><strong>Money correctness</strong><span>All EGP values stored as integer piasters. Never use floating-point totals.</span></div>
+    <div class="rule-card"><strong>Admin security</strong><span>proxy.ts performs only an optimistic redirect. Every page, action, and handler re-checks the admin session.</span></div>
+    <div class="rule-card"><strong>Private payment proof</strong><span>InstaPay screenshots use private assets and signed read URLs. They are visible on the order, not a separate approval gate.</span></div>
+    <div class="rule-card"><strong>Cache by domain</strong><span>Catalog/categories use cache tags. Cart, checkout, orders, sessions, and stock are never shared-cache data.</span></div>
+    <div class="rule-card"><strong>Thin routes</strong><span>Pages and handlers validate, authorize, then call services. Business rules never live in React components.</span></div>
+    <div class="rule-card"><strong>Stock safety</strong><span>Conditional decrement inside a MongoDB transaction prevents selling unavailable variants.</span></div>
+    <div class="rule-card"><strong>Replaceable providers</strong><span>Storage and analytics sit behind interfaces: Cloudinary now; GA4 now; Meta Pixel later.</span></div>
+    <div class="rule-card"><strong>Shadcn discipline</strong><span>Primitives live only in components/ui. Store and admin compose them into domain-specific components.</span></div>
+  </div>
+</section>
+
+<section class="section-card">
+  <div class="section-head"><div><h3>6. Build sequence</h3><p>Each phase leaves a testable vertical slice instead of a pile of disconnected pages.</p></div><span class="step-badge">5 phases</span></div>
+  <div class="phases">
+    <div class="phase"><b>01</b><strong>Foundation</strong><span>src migration, shadcn theme, DB, env, errors, auth, shells</span></div>
+    <div class="phase"><b>02</b><strong>Catalog</strong><span>categories, products, variants, stock, media, shop pages</span></div>
+    <div class="phase"><b>03</b><strong>Commerce</strong><span>anonymous cart, checkout, COD/InstaPay, order transaction</span></div>
+    <div class="phase"><b>04</b><strong>Operations</strong><span>dashboard, orders, contacts, subscribers, exports, settings</span></div>
+    <div class="phase"><b>05</b><strong>Growth & hardening</strong><span>funnel, GA4 adapter, tests, a11y, rate limits, performance</span></div>
+  </div>
+</section>
+
+<p class="decision-note">Choose the system direction. If A is selected, the next design screen will expand the Product, Variant, Category, Cart, and Order schemas field-by-field.</p>
+<div class="options">
+  <div class="option" data-choice="architecture-modular-monolith" onclick="toggleSelect(this)">
+    <div class="letter">A</div><div class="content"><h3>Approve the modular monolith</h3><p>Use this architecture and continue into the database schema.</p></div>
+  </div>
+  <div class="option" data-choice="architecture-express" onclick="toggleSelect(this)">
+    <div class="letter">B</div><div class="content"><h3>Use a separate Express API</h3><p>Accept the operational overhead for a classic split MERN architecture.</p></div>
+  </div>
+  <div class="option" data-choice="architecture-revise" onclick="toggleSelect(this)">
+    <div class="letter">C</div><div class="content"><h3>Revise this blueprint</h3><p>Keep the direction but change specific routes, modules, or folders.</p></div>
+  </div>
+</div>

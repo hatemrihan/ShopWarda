@@ -1,0 +1,134 @@
+<style>
+  .map-kicker { color:#6ea8ff; font-size:11px; letter-spacing:.18em; text-transform:uppercase; font-weight:800; }
+  .map-title { margin:8px 0 6px; }
+  .map-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin:26px 0; }
+  .route-panel { background:#171716; border:1px solid #383835; border-radius:18px; padding:20px; }
+  .route-panel.admin { border-color:#315c94; }
+  .panel-head { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; padding-bottom:15px; border-bottom:1px solid #30302d; }
+  .panel-head h3 { margin:0 0 4px; font-size:20px; }
+  .panel-head p { margin:0; color:#888882; font-size:12px; }
+  .domain-pill { white-space:nowrap; padding:7px 10px; background:#222220; border:1px solid #3b3b37; border-radius:999px; color:#bdbdb7; font:11px ui-monospace,monospace; }
+  .route-groups { display:grid; gap:16px; margin-top:18px; }
+  .route-group-title { color:#74746e; font-size:10px; letter-spacing:.14em; text-transform:uppercase; font-weight:800; margin-bottom:8px; }
+  .route-tree { display:grid; gap:7px; }
+  .route-row { display:grid; grid-template-columns:145px 1fr auto; gap:12px; align-items:center; padding:10px 11px; border:1px solid #343431; border-radius:10px; background:#20201e; }
+  .route-row.child { margin-left:18px; position:relative; }
+  .route-row.child:before { content:'↳'; position:absolute; left:-17px; color:#5f5f59; }
+  .route-name { color:#eeeeea; font-size:13px; font-weight:700; }
+  .route-path { color:#8fbcff; font:11px ui-monospace,SFMono-Regular,Menlo,monospace; overflow-wrap:anywhere; }
+  .route-purpose { color:#777771; font-size:11px; text-align:right; }
+  .route-row.required { border-color:#315c94; background:#172238; }
+  .route-row.required .route-name { color:#dceaff; }
+  .shared-shell { border:1px solid #343431; background:#151514; border-radius:15px; padding:16px 18px; margin-bottom:24px; }
+  .shared-shell h3 { margin:0 0 12px; font-size:14px; }
+  .shell-row { display:flex; gap:8px; flex-wrap:wrap; }
+  .shell-chip { color:#bdbdb7; border:1px solid #383834; background:#222220; border-radius:8px; padding:7px 10px; font-size:11px; }
+  .map-note { color:#85857f; font-size:12px; margin-top:10px; }
+  @media(max-width:950px){.map-grid{grid-template-columns:1fr}.route-row{grid-template-columns:125px 1fr}.route-purpose{display:none}}
+</style>
+
+<div class="map-kicker">ShopWarda · Complete route architecture · Revision 2</div>
+<h2 class="map-title">Every page now has a visible place</h2>
+<p class="subtitle">The highlighted rows are the routes you explicitly called out. Dynamic segments use Next.js notation: <strong>[slug]</strong>.</p>
+
+<div class="map-grid">
+  <section class="route-panel">
+    <div class="panel-head">
+      <div><h3>Public store</h3><p>No customer sign-in. SEO-friendly storefront and guest checkout.</p></div>
+      <span class="domain-pill">shopwarda.com</span>
+    </div>
+
+    <div class="route-groups">
+      <div>
+        <div class="route-group-title">Discover & browse</div>
+        <div class="route-tree">
+          <div class="route-row"><span class="route-name">Home</span><span class="route-path">/</span><span class="route-purpose">landing + featured</span></div>
+          <div class="route-row required"><span class="route-name">Shop</span><span class="route-path">/shop</span><span class="route-purpose">all products</span></div>
+          <div class="route-row required"><span class="route-name">Categories</span><span class="route-path">/categories</span><span class="route-purpose">all categories</span></div>
+          <div class="route-row child required"><span class="route-name">Category</span><span class="route-path">/categories/[slug]</span><span class="route-purpose">category products</span></div>
+          <div class="route-row"><span class="route-name">Product</span><span class="route-path">/product/[slug]</span><span class="route-purpose">variant selection</span></div>
+          <div class="route-row"><span class="route-name">Search</span><span class="route-path">/search?q=...</span><span class="route-purpose">search results</span></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="route-group-title">Purchase</div>
+        <div class="route-tree">
+          <div class="route-row"><span class="route-name">Cart</span><span class="route-path">/cart</span><span class="route-purpose">persistent anonymous cart</span></div>
+          <div class="route-row"><span class="route-name">Checkout</span><span class="route-path">/checkout</span><span class="route-purpose">COD or InstaPay</span></div>
+          <div class="route-row child"><span class="route-name">Success</span><span class="route-path">/checkout/success/[orderNumber]</span><span class="route-purpose">receipt + next steps</span></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="route-group-title">Trust & communication</div>
+        <div class="route-tree">
+          <div class="route-row required"><span class="route-name">Contact</span><span class="route-path">/contact</span><span class="route-purpose">customer message</span></div>
+          <div class="route-row"><span class="route-name">Subscribe</span><span class="route-path">/subscribe</span><span class="route-purpose">newsletter signup</span></div>
+          <div class="route-row"><span class="route-name">Shipping</span><span class="route-path">/shipping</span><span class="route-purpose">Egypt delivery policy</span></div>
+          <div class="route-row"><span class="route-name">Returns</span><span class="route-path">/returns</span><span class="route-purpose">return policy</span></div>
+          <div class="route-row"><span class="route-name">Privacy</span><span class="route-path">/privacy</span><span class="route-purpose">data policy</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="route-panel admin">
+    <div class="panel-head">
+      <div><h3>Protected admin</h3><p>Merchant-only authentication with the right-sidebar shell you liked.</p></div>
+      <span class="domain-pill">shopwarda.com/admin</span>
+    </div>
+
+    <div class="route-groups">
+      <div>
+        <div class="route-group-title">Access & overview</div>
+        <div class="route-tree">
+          <div class="route-row"><span class="route-name">Admin login</span><span class="route-path">/admin/login</span><span class="route-purpose">merchant sign-in</span></div>
+          <div class="route-row"><span class="route-name">Dashboard</span><span class="route-path">/admin</span><span class="route-purpose">KPIs + recent activity</span></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="route-group-title">Commerce</div>
+        <div class="route-tree">
+          <div class="route-row"><span class="route-name">Orders</span><span class="route-path">/admin/orders</span><span class="route-purpose">filter + fulfill</span></div>
+          <div class="route-row child"><span class="route-name">Order details</span><span class="route-path">/admin/orders/[id]</span><span class="route-purpose">items + payment proof</span></div>
+          <div class="route-row"><span class="route-name">Products</span><span class="route-path">/admin/products</span><span class="route-purpose">catalog table</span></div>
+          <div class="route-row child"><span class="route-name">New product</span><span class="route-path">/admin/products/new</span><span class="route-purpose">create</span></div>
+          <div class="route-row child"><span class="route-name">Edit product</span><span class="route-path">/admin/products/[id]/edit</span><span class="route-purpose">variants + media</span></div>
+          <div class="route-row required"><span class="route-name">Categories</span><span class="route-path">/admin/categories</span><span class="route-purpose">create + edit + order</span></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="route-group-title">Customers & growth</div>
+        <div class="route-tree">
+          <div class="route-row required"><span class="route-name">Contacts</span><span class="route-path">/admin/contacts</span><span class="route-purpose">contact submissions</span></div>
+          <div class="route-row"><span class="route-name">Subscriptions</span><span class="route-path">/admin/subscriptions</span><span class="route-purpose">subscriber export</span></div>
+          <div class="route-row"><span class="route-name">Funnel</span><span class="route-path">/admin/funnel</span><span class="route-purpose">Google + future Meta</span></div>
+          <div class="route-row"><span class="route-name">Settings</span><span class="route-path">/admin/settings</span><span class="route-purpose">store + shipping + InstaPay</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<section class="shared-shell">
+  <h3>Shared storefront shell — visible on every shopping route</h3>
+  <div class="shell-row">
+    <span class="shell-chip">Announcement bar</span><span class="shell-chip">Header</span><span class="shell-chip">Desktop navigation</span><span class="shell-chip">Mobile menu</span><span class="shell-chip">Live cart drawer</span><span class="shell-chip">Search</span><span class="shell-chip">Footer</span><span class="shell-chip">Subscription form</span>
+  </div>
+  <div class="map-note">The cart drawer is a shared component; <strong>/cart</strong> remains the full cart page.</div>
+</section>
+
+<div class="options">
+  <div class="option" data-choice="sitemap-approved" onclick="toggleSelect(this)">
+    <div class="letter">A</div><div class="content"><h3>Complete sitemap approved</h3><p>Keep these routes and move to the product/category database model.</p></div>
+  </div>
+  <div class="option" data-choice="sitemap-add-remove" onclick="toggleSelect(this)">
+    <div class="letter">B</div><div class="content"><h3>Add or remove routes</h3><p>Tell me the exact pages that should change.</p></div>
+  </div>
+  <div class="option" data-choice="sitemap-rename" onclick="toggleSelect(this)">
+    <div class="letter">C</div><div class="content"><h3>Rename route paths</h3><p>The pages are right, but URL naming needs adjustment.</p></div>
+  </div>
+</div>
