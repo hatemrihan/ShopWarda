@@ -62,5 +62,10 @@
     "eslint-config-next": "16.2.11",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "@auth/mongodb-adapter": {
+      "mongodb": "$mongodb"
+    }
   }
 }
