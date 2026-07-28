@@ -59,7 +59,7 @@ export function OrderSummary({
   };
 
   return (
-    <div className="bg-[#faf6f1]/80 rounded-2xl p-6 space-y-6 lg:sticky lg:top-28 border border-neutral-200/60 shadow-sm">
+    <div className="bg-white/80 rounded-2xl p-6 space-y-6 lg:sticky lg:top-28 border border-neutral-200/60 shadow-sm">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-neutral-300/80 pb-3">
         <h2 className="text-xs font-bold uppercase tracking-widest text-neutral-800">

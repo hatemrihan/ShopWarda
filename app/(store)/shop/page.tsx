@@ -87,7 +87,7 @@ export default async function ShopPage({ searchParams }: Props) {
   }));
 
   return (
-    <div className="min-h-screen bg-[#faf6f1]">
+    <div className="min-h-screen bg-white">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-8 pb-16">
         {/* Top Bar: Breadcrumbs + Filter/Sort Controls */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2 border-b border-neutral-200/40 sm:border-none">

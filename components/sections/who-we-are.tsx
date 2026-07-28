@@ -8,7 +8,7 @@ export function WhoWeAreSection() {
   return (
     <section
       ref={sectionRef}
-      className="relative bg-[#faf6f1] overflow-hidden"
+      className="relative bg-white overflow-hidden"
     >
 
       {/* Subtle organic line art overlay — SVG branch */}

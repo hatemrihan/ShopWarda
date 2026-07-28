@@ -9,7 +9,7 @@ export function ModernDriedFlowersSection() {
   return (
     <section
       ref={sectionRef}
-      className="relative bg-[#faf6f1] overflow-hidden py-20 md:py-32"
+      className="relative bg-white overflow-hidden py-20 md:py-32"
     >
       <div className="max-w-[1400px] mx-auto px-6 md:px-10">
         {/* Giant Title */}
@@ -19,8 +19,7 @@ export function ModernDriedFlowersSection() {
             style={{ fontFamily: 'var(--font-playfair), Georgia, serif' }}
           >
             <span className="block md:inline">Modern </span>
-            <span className="block md:inline">Dried </span>
-            <span className="block md:inline">Flowers</span>
+            <span className="block md:inline">Advertisement</span>
           </h2>
         </div>
 

@@ -152,7 +152,7 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
   const categoryName = product.categoryNames?.[0] || 'Ready to Wear';
 
   return (
-    <div className="min-h-screen bg-[#faf6f1]">
+    <div className="min-h-screen bg-white">
       <div className="max-w-[1100px] mx-auto px-6 lg:px-0 py-8">
 
         {/* Main Product Section */}
@@ -173,7 +173,7 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
                         block: 'center',
                       });
                     }}
-                    className={`relative w-full aspect-square overflow-hidden border transition-all duration-200 bg-[#faf6f1] flex items-center justify-center ${selectedImageIndex === index
+                    className={`relative w-full aspect-square overflow-hidden border transition-all duration-200 bg-white flex items-center justify-center ${selectedImageIndex === index
                         ? 'border-black border-2'
                         : 'border-neutral-300 hover:border-black'
                       }`}
@@ -231,7 +231,7 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
 
               {/* Mobile Dots */}
               {mediaList.length > 1 && (
-                <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex space-x-2 z-10 bg-[#faf6f1]/80 px-3 py-2 rounded-full">
+                <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex space-x-2 z-10 bg-white/80 px-3 py-2 rounded-full">
                   {mediaList.map((_, index) => (
                     <button
                       key={index}
@@ -253,7 +253,7 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
                     key={item.assetKey || index}
                     type="button"
                     onClick={() => setSelectedImageIndex(index)}
-                    className={`relative aspect-square overflow-hidden border transition-all duration-200 bg-[#faf6f1] flex items-center justify-center ${selectedImageIndex === index
+                    className={`relative aspect-square overflow-hidden border transition-all duration-200 bg-white flex items-center justify-center ${selectedImageIndex === index
                         ? 'border-black border-2'
                         : 'border-gray-300'
                       }`}
@@ -344,10 +344,10 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
                     }
                   }}
                 >
-                  <SelectTrigger className="w-full bg-[#faf6f1] border border-black text-black h-12 text-sm font-normal rounded-none">
+                  <SelectTrigger className="w-full bg-white border border-black text-black h-12 text-sm font-normal rounded-none">
                     <SelectValue placeholder="Select Size" />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#faf6f1] border border-black rounded-none">
+                  <SelectContent className="bg-white border border-black rounded-none">
                     {sizeOption.values.map((size) => (
                       <SelectItem
                         key={size}
@@ -361,10 +361,10 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
                 </Select>
               ) : (
                 <Select value="one-size" disabled>
-                  <SelectTrigger className="w-full bg-[#faf6f1] border border-black text-black h-12 text-sm font-normal rounded-none">
-                    <SelectValue placeholder="One Size" />
+                  <SelectTrigger className="w-full bg-white border border-black text-black h-12 text-sm font-normal rounded-none">
+                    <SelectValue placeholder="Select Recipient's Governorate" />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#faf6f1] border border-black rounded-none">
+                  <SelectContent className="bg-white border border-black rounded-none">
                     <SelectItem value="one-size">One Size</SelectItem>
                   </SelectContent>
                 </Select>
@@ -459,7 +459,7 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
       {/* SHADCN SHEET DRAWER FOR SIZE GUIDE */}
       {sizeGuide?.enabled && (
         <Sheet open={showSizeGuide} onOpenChange={setShowSizeGuide}>
-          <SheetContent side="right" className="bg-[#faf6f1] border-l border-neutral-300 w-full sm:max-w-md p-6 text-[#1a1a1a]">
+          <SheetContent side="right" className="bg-white border-l border-neutral-300 w-full sm:max-w-md p-6 text-[#1a1a1a]">
             <SheetHeader className="mb-6 border-b border-neutral-300 pb-4">
               <SheetTitle className="text-xl font-normal font-[family-name:var(--font-playfair)] tracking-wide">
                 {sizeGuide.title}

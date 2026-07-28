@@ -120,7 +120,7 @@ export function ProductFilterBar({
             <ArrowUpDown className="h-3 w-3 text-neutral-400 shrink-0" />
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="bg-[#faf6f1] border border-neutral-200 rounded-md shadow-lg min-w-[160px]">
+          <SelectContent className="bg-white border border-neutral-200 rounded-md shadow-lg min-w-[160px]">
             {SORT_OPTIONS.map((opt) => (
               <SelectItem
                 key={opt.value}
@@ -155,7 +155,7 @@ export function ProductFilterBar({
       <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
         <SheetContent
           side="right"
-          className="bg-[#faf6f1] border-l border-neutral-300 w-full sm:max-w-sm p-0 text-[#1a1a1a]"
+          className="bg-white border-l border-neutral-300 w-full sm:max-w-sm p-0 text-[#1a1a1a]"
         >
           <SheetHeader className="px-6 pt-6 pb-4 border-b border-neutral-200">
             <div className="flex items-center justify-between">
@@ -255,7 +255,7 @@ export function ProductFilterBar({
 
           {/* Apply / footer */}
           {activeFilterCount > 0 && (
-            <div className="absolute bottom-0 left-0 right-0 px-6 py-4 border-t border-neutral-200 bg-[#faf6f1]">
+            <div className="absolute bottom-0 left-0 right-0 px-6 py-4 border-t border-neutral-200 bg-white">
               <button
                 type="button"
                 onClick={() => setFilterOpen(false)}

@@ -246,7 +246,7 @@ export default function CheckoutPage() {
 
   if (!isLoaded) {
     return (
-      <div className="bg-[#faf6f1] min-h-screen py-12">
+      <div className="bg-white min-h-screen py-12">
         <div className="container max-w-6xl mx-auto px-4 space-y-8">
           <Skeleton className="h-6 w-32" />
           <Skeleton className="h-10 w-48" />
@@ -267,7 +267,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="bg-[#faf6f1] min-h-screen py-10 lg:py-16">
+    <div className="bg-white min-h-screen py-10 lg:py-16">
       <div className="container max-w-6xl mx-auto px-4">
         {/* Breadcrumbs */}
         <div className="mb-6">

@@ -21,7 +21,7 @@ export default async function HomePage() {
       <HeroSection />
 
 
-      {/* Modern Dried Flowers */}
+      {/* Advertisement */}
       <ModernDriedFlowersSection />
 
       {/* Category Showcase — dynamic from admin categories */}

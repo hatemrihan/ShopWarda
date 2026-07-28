@@ -55,7 +55,6 @@ export const authOptions: NextAuthOptions = {
         if (!admin.googleId && account.providerAccountId) {
           admin.googleId = account.providerAccountId;
           admin.image = user.image ?? undefined;
-          await admin.save();
         }
 
         admin.lastLoginAt = new Date();
@@ -80,6 +79,7 @@ export const authOptions: NextAuthOptions = {
           await connectDB();
           const admin = await Admin.findOne({
             emailNormalized: user.email.toLowerCase(),
+            isActive: true,
           });
 
           if (admin) {

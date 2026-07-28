@@ -22,6 +22,15 @@ export const metadata: Metadata = {
   },
   description:
     'Discover unique handcrafted fashion from Egypt. Shop curated collections of clothing, accessories, and more.',
+  icons: {
+    icon: [
+      { url: '/images/logo.png', type: 'image/png' },
+    ],
+    shortcut: ['/images/logo.png'],
+    apple: [
+      { url: '/images/logo.png', type: 'image/png' },
+    ],
+  },
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_VERCEL_URL
       ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`

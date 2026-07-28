@@ -14,7 +14,7 @@ export default function AboutPage() {
       <WhoWeAreSection />
 
       {/* Full-width hero image — edge-to-edge, no padding */}
-      <section className="relative w-full bg-[#faf6f1]">
+      {/* <section className="relative w-full bg-white">
         <div className="mx-auto max-w-[1200px] px-4 md:px-8 pb-24 md:pb-32">
           <div className="relative aspect-[4/3] w-full overflow-hidden">
             <Image
@@ -27,7 +27,7 @@ export default function AboutPage() {
             />
           </div>
         </div>
-      </section>
+      </section> */}
     </div>
   );
 }

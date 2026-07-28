@@ -130,7 +130,7 @@ export function SiteHeader() {
         className={`
           fixed top-0 left-0 right-0 z-50 transition-all duration-500
           ${scrolled
-            ? 'bg-[#faf6f1]/95 backdrop-blur-md shadow-[0_1px_0_rgba(0,0,0,0.04)]'
+            ? 'bg-white/95 backdrop-blur-md shadow-[0_1px_0_rgba(0,0,0,0.04)]'
             : 'bg-transparent'
           }
         `}
@@ -405,7 +405,7 @@ export function SiteHeader() {
       {/* Mobile Menu Overlay */}
       <div
         className={`
-          fixed inset-0 z-[60] bg-[#faf6f1] transition-all duration-500
+          fixed inset-0 z-[60] bg-white transition-all duration-500
           ${mobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
         `}
       >

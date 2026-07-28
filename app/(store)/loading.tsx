@@ -4,7 +4,7 @@ export default function HomeLoading() {
   return (
     <div>
       {/* Hero skeleton */}
-      <div className="relative min-h-screen flex items-center bg-[#faf6f1]">
+      <div className="relative min-h-screen flex items-center bg-white">
         <div className="max-w-[1400px] mx-auto px-6 md:px-10 pt-20 md:pt-32 pb-10 md:pb-14 w-full">
           {/* Headline skeleton */}
           <div className="text-center mb-12 md:mb-16 mt-4 md:mt-6">

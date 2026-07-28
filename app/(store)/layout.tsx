@@ -8,7 +8,7 @@ export default function StoreLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="relative flex min-h-screen flex-col bg-[#faf6f1]">
+    <div className="relative flex min-h-screen flex-col bg-white">
       <SiteHeader />
       <CartDrawer />
       <main className="flex-1 pt-24 md:pt-28">{children}</main>

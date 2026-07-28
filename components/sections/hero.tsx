@@ -14,7 +14,7 @@ const SLIDES = [
   },
   {
     num: '02',
-    title: 'DRIED FLOWERS',
+    title: 'Advertisement',
     description: 'Timeless arrangements that last for months, not days.',
     image: '/images/two.png',
   },
@@ -147,7 +147,7 @@ export function HeroSection() {
   const slide = SLIDES[active];
 
   return (
-    <section ref={sectionRef} className="relative bg-[#faf6f1] min-h-screen flex items-center overflow-hidden">
+    <section ref={sectionRef} className="relative bg-white min-h-screen flex items-center overflow-hidden">
       <div className="max-w-[1400px] mx-auto px-6 md:px-10 pt-20 md:pt-32 pb-10 md:pb-14 w-full">
 
         {/* Headline */}

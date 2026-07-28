@@ -51,7 +51,7 @@ export function CategorySortBar({ totalCategories }: CategorySortBarProps) {
           <ArrowUpDown className="h-3 w-3 text-neutral-400 shrink-0" />
           <SelectValue />
         </SelectTrigger>
-        <SelectContent className="bg-[#faf6f1] border border-neutral-200 rounded-md shadow-lg min-w-[160px]">
+        <SelectContent className="bg-white border border-neutral-200 rounded-md shadow-lg min-w-[160px]">
           {SORT_OPTIONS.map((opt) => (
             <SelectItem
               key={opt.value}

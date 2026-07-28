@@ -19,7 +19,7 @@ export function CategoryShowcaseSection({ categories }: CategoryShowcaseSectionP
   if (!categories.length) return null;
 
   return (
-    <section className="relative bg-[#faf6f1] overflow-hidden py-16 md:py-28">
+    <section className="relative bg-white overflow-hidden py-16 md:py-28">
       <div className="max-w-[1400px] mx-auto px-6 md:px-10">
         {categories.map((cat, index) => {
           const isEven = index % 2 === 0;
