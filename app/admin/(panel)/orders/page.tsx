@@ -880,13 +880,27 @@ export default function AdminOrdersPage() {
                           <div className="text-[13px] text-white/80">{item.name}</div>
                           {item.attributes && Object.keys(item.attributes).length > 0 ? (
                             <div className="text-[11px] text-white/30 space-y-0.5 mt-0.5">
-                              {Object.entries(item.attributes).map(([key, val]) => (
-                                <div key={key}>{key}: {val}</div>
-                              ))}
+                              {Object.entries(item.attributes)
+                                .filter(([key]) => key !== 'Card')
+                                .map(([key, val]) => (
+                                  <div key={key}>{key}: {val}</div>
+                                ))}
                             </div>
                           ) : (item.color || item.size) && (
                             <div className="text-[11px] text-white/30 mt-0.5">
                               {[item.color, item.size].filter(Boolean).join(' - ')}
+                            </div>
+                          )}
+
+                          {/* The florist handwrites this — it must not blend in. */}
+                          {item.attributes?.['Card'] && (
+                            <div className="mt-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25">
+                              <div className="text-[10px] uppercase tracking-wider text-amber-400 font-semibold mb-1">
+                                ✍ Handwritten card
+                              </div>
+                              <div className="text-[12px] text-white/90 whitespace-pre-wrap">
+                                {item.attributes['Card']}
+                              </div>
                             </div>
                           )}
                         </div>

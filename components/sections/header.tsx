@@ -17,7 +17,24 @@ type SearchResult = {
 
 export function SiteHeader() {
   const [scrolled, setScrolled] = useState(false);
+  // The bouquet builder ships behind an admin flag; don't advertise a 404.
+  const [bouquetEnabled, setBouquetEnabled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    fetch('/api/bouquet/enabled')
+      .then((res) => res.json())
+      .then((data) => {
+        if (mounted) setBouquetEnabled(Boolean(data?.enabled));
+      })
+      .catch(() => {
+        /* leave the link hidden */
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
   const { state: cartState, openCart } = useCart();
 
   // ── Search state ─────────────────────────────────────────────
@@ -154,6 +171,7 @@ export function SiteHeader() {
               {[
                 { label: 'Shop', href: '/shop' },
                 { label: 'Categories', href: '/categories' },
+                ...(bouquetEnabled ? [{ label: 'Build a Bouquet', href: '/bouquet' }] : []),
                 { label: 'About', href: '/about' },
                 { label: 'Contact', href: '/contact' },
               ].map((item) => (
@@ -431,6 +449,7 @@ export function SiteHeader() {
           {[
             { label: 'Shop', href: '/shop' },
             { label: 'Categories', href: '/categories' },
+            ...(bouquetEnabled ? [{ label: 'Build a Bouquet', href: '/bouquet' }] : []),
             { label: 'About', href: '/about' },
             { label: 'Contact', href: '/contact' },
             { label: 'Cart', href: '/cart' },

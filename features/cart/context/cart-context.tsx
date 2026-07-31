@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useReducer, useEffect, useState } from 'react';
+import type { BouquetConfig } from '@/features/bouquet/schemas';
 
 export interface CartItemVariant {
   name: string;
@@ -19,6 +20,19 @@ export interface CartItem {
   variant?: CartItemVariant;
   /** Distinguishes catalog products from composed items (e.g. custom bouquets). */
   kind?: 'catalog' | 'bouquet';
+  /**
+   * Raw configuration for a composed item, replayed to the server at checkout.
+   * It carries no prices — the server re-prices from the database.
+   */
+  customization?: BouquetConfig;
+  /**
+   * Human-readable composition for cart/checkout display only. The config
+   * above carries the ids the server actually prices from; this is never
+   * trusted for anything but rendering.
+   */
+  compositionSummary?: { label: string; value: string }[];
+  /** Set when the buyer attached a handwritten card. */
+  hasCard?: boolean;
   /**
    * Stable hash of a composed item's configuration. Part of cart identity, so
    * two differently-configured bouquets occupy two lines rather than merging.

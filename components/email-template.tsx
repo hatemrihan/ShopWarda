@@ -15,6 +15,7 @@ export interface OrderEmailTemplateProps {
   codFee: number;
   discountAmount: number;
   promoCode?: string;
+  deliveryNotes?: string;
   totalAmount: number;
   paymentMethod: string;
   shippingAddress: {
@@ -26,12 +27,53 @@ export interface OrderEmailTemplateProps {
   customerPhone: string;
 }
 
+/**
+ * Item sub-line: size/colour for catalog items, and the full attribute map,
+ * which is how a custom bouquet's composition arrives here.
+ */
+function itemDetailsHtml(item: OrderEmailTemplateProps['orderItems'][number]): string {
+  const attrs = item.attributes ? Object.entries(item.attributes) : [];
+
+  if (attrs.length > 0) {
+    const lines = attrs
+      .map(([label, value]) => `<div>${escapeHtml(label)}: ${escapeHtml(String(value))}</div>`)
+      .join('');
+    return `<div style="font-size:12px;color:#78716c;margin-top:4px;line-height:1.6">${lines}</div>`;
+  }
+
+  if (item.size || item.color) {
+    return `<div style="font-size:12px;color:#78716c;margin-top:2px">${item.size ? `Size: ${escapeHtml(item.size)}` : ''} ${item.color ? `\u00b7 Color: ${escapeHtml(item.color)}` : ''}</div>`;
+  }
+
+  return '';
+}
+
+/** Order data is customer-supplied; never interpolate it raw into HTML. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * The florist handwrites the card, so the message must be impossible to miss
+ * in the admin email. It arrives as a "Card" attribute on a bouquet item.
+ */
+function cardMessagesOf(data: OrderEmailTemplateProps): string[] {
+  return data.orderItems
+    .map((i) => i.attributes?.['Card'])
+    .filter((m): m is string => Boolean(m && m.trim()));
+}
+
 export function buildOrderEmailHtml(data: OrderEmailTemplateProps): string {
   const itemsHtml = data.orderItems.map((item) => `
     <tr style="border-bottom:1px solid #f5f5f4">
       <td style="padding:12px 0">
         <div style="font-weight:600;font-size:14px;color:#1c1917">${item.name}</div>
-        ${(item.size || item.color) ? `<div style="font-size:12px;color:#78716c;margin-top:2px">${item.size ? `Size: ${item.size}` : ''} ${item.color ? `· Color: ${item.color}` : ''}</div>` : ''}
+        ${itemDetailsHtml(item)}
       </td>
       <td style="text-align:center;padding:12px 0;font-size:14px;color:#1c1917">${item.quantity}</td>
       <td style="text-align:right;padding:12px 0;font-size:14px;font-weight:600;color:#1c1917">EGP ${(item.price * item.quantity).toLocaleString()}</td>
@@ -62,7 +104,7 @@ export function buildOrderEmailHtml(data: OrderEmailTemplateProps): string {
       </table>
       <div style="background:#fafaf9;padding:16px;border-radius:8px;margin-bottom:24px">
         <div style="display:flex;justify-content:space-between;font-size:13px;color:#57534e;margin-bottom:8px"><span>Subtotal</span><span>EGP ${data.subtotal.toLocaleString()}</span></div>
-        ${data.discountAmount > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;color:#15803d;margin-bottom:8px"><span>Discount</span><span>-EGP ${data.discountAmount.toLocaleString()}</span></div>` : ''}
+        ${data.discountAmount > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;color:#15803d;margin-bottom:8px"><span>Discount${data.promoCode ? ` (${escapeHtml(data.promoCode)})` : ''}</span><span>-EGP ${data.discountAmount.toLocaleString()}</span></div>` : ''}
         <div style="display:flex;justify-content:space-between;font-size:13px;color:#57534e;margin-bottom:8px"><span>Shipping</span><span>${data.shippingCost > 0 ? `EGP ${data.shippingCost.toLocaleString()}` : 'FREE'}</span></div>
         ${data.codFee > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;color:#57534e;margin-bottom:8px"><span>COD Fee</span><span>EGP ${data.codFee.toLocaleString()}</span></div>` : ''}
         <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;color:#1c1917;border-top:1px solid #e7e5e4;padding-top:10px;margin-top:6px"><span>Total</span><span>EGP ${data.totalAmount.toLocaleString()}</span></div>
@@ -87,7 +129,7 @@ export function buildOrderEmailHtml(data: OrderEmailTemplateProps): string {
 export function buildAdminOrderEmailHtml(data: OrderEmailTemplateProps): string {
   const itemsHtml = data.orderItems.map((item) => `
     <tr style="border-bottom:1px solid #f4f4f5">
-      <td style="padding:10px 0;font-size:13px;color:#09090b;font-weight:600">${item.name} x ${item.quantity}</td>
+      <td style="padding:10px 0;font-size:13px;color:#09090b;font-weight:600">${item.name} x ${item.quantity}${itemDetailsHtml(item)}</td>
       <td style="padding:10px 0;font-size:13px;color:#09090b;text-align:right;font-weight:600">EGP ${(item.price * item.quantity).toLocaleString()}</td>
     </tr>
   `).join('');
@@ -116,11 +158,25 @@ export function buildAdminOrderEmailHtml(data: OrderEmailTemplateProps): string 
       </table>
       <div style="border-top:2px solid #e4e4e7;padding-top:12px;font-size:14px">
         <div style="display:flex;justify-content:space-between;color:#52525b;margin-bottom:4px"><span>Subtotal</span><span>EGP ${data.subtotal.toLocaleString()}</span></div>
-        ${data.discountAmount > 0 ? `<div style="display:flex;justify-content:space-between;color:#16a34a;margin-bottom:4px"><span>Discount</span><span>-EGP ${data.discountAmount.toLocaleString()}</span></div>` : ''}
+        ${data.discountAmount > 0 ? `<div style="display:flex;justify-content:space-between;color:#16a34a;margin-bottom:4px"><span>Discount${data.promoCode ? ` (${escapeHtml(data.promoCode)})` : ''}</span><span>-EGP ${data.discountAmount.toLocaleString()}</span></div>` : ''}
         <div style="display:flex;justify-content:space-between;color:#52525b;margin-bottom:4px"><span>Shipping</span><span>EGP ${data.shippingCost.toLocaleString()}</span></div>
         ${data.codFee > 0 ? `<div style="display:flex;justify-content:space-between;color:#52525b;margin-bottom:4px"><span>COD Fee</span><span>EGP ${data.codFee.toLocaleString()}</span></div>` : ''}
         <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:800;color:#09090b;margin-top:8px;padding-top:8px;border-top:1px solid #e4e4e7"><span>Total Amount</span><span>EGP ${data.totalAmount.toLocaleString()}</span></div>
       </div>
+
+      ${cardMessagesOf(data).map((msg) => `
+        <div style="margin-top:16px;padding:16px;background:#fffbeb;border:2px solid #f59e0b;border-radius:8px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#b45309;font-weight:700;margin-bottom:8px">\u270D Handwritten card \u2014 write this out</div>
+          <div style="font-size:15px;color:#1c1917;line-height:1.6;white-space:pre-wrap">${escapeHtml(msg)}</div>
+        </div>
+      `).join('')}
+
+      ${data.deliveryNotes ? `
+        <div style="margin-top:16px;padding:12px;background:#f4f4f5;border-radius:8px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#71717a;font-weight:700;margin-bottom:6px">Delivery notes</div>
+          <div style="font-size:13px;color:#3f3f46;line-height:1.6;white-space:pre-wrap">${escapeHtml(data.deliveryNotes)}</div>
+        </div>
+      ` : ''}
     </div>
   </div>
 </body>

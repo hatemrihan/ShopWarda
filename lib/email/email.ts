@@ -62,6 +62,7 @@ export interface OrderEmailData {
   codFee: number;
   discountAmount: number;
   promoCode?: string;
+  deliveryNotes?: string;
   totalAmount: number;
   paymentMethod: string;
   shippingAddress: {
@@ -163,6 +164,7 @@ export async function sendOrderConfirmationEmail(data: OrderEmailData): Promise<
       codFee: data.codFee,
       discountAmount: data.discountAmount,
       promoCode: data.promoCode,
+      deliveryNotes: data.deliveryNotes,
       totalAmount: data.totalAmount,
       paymentMethod: data.paymentMethod,
       shippingAddress: data.shippingAddress,
@@ -211,6 +213,7 @@ export async function sendAdminOrderNotification(data: OrderEmailData): Promise<
       codFee: data.codFee,
       discountAmount: data.discountAmount,
       promoCode: data.promoCode,
+      deliveryNotes: data.deliveryNotes,
       totalAmount: data.totalAmount,
       paymentMethod: data.paymentMethod,
       shippingAddress: data.shippingAddress,

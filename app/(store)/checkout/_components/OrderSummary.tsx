@@ -100,6 +100,20 @@ export function OrderSummary({
                   {item.variant.name} {item.variant.color && `· ${item.variant.color}`}
                 </p>
               )}
+
+              {/* Custom bouquet composition */}
+              {item.compositionSummary && item.compositionSummary.length > 0 && (
+                <div className="mt-1 space-y-0.5">
+                  {item.compositionSummary.map((line, i) => (
+                    <p key={i} className="text-[11px] text-neutral-500">
+                      {line.label} <span className="text-neutral-400">{line.value}</span>
+                    </p>
+                  ))}
+                  {item.hasCard && (
+                    <p className="text-[11px] text-neutral-500">✉ Card included</p>
+                  )}
+                </div>
+              )}
               <div className="mt-1 flex items-center gap-1.5">
                 <Badge variant="outline" className="text-[9px] font-mono font-bold tracking-wider px-1.5 py-0 border-neutral-300 text-neutral-600">
                   QTY: {item.quantity}

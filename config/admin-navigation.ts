@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Package,
   FolderTree,
+  Flower2,
   ShoppingCart,
   Tag,
   MessageSquare,
@@ -40,6 +41,7 @@ export const adminNavGroups: AdminNavGroup[] = [
     items: [
       { label: 'Products', href: '/admin/products', icon: Package },
       { label: 'Categories', href: '/admin/categories', icon: FolderTree },
+      { label: 'Bouquet Builder', href: '/admin/bouquet', icon: Flower2 },
     ],
   },
   {

@@ -119,6 +119,20 @@ export function CartDrawer() {
                           </p>
                         )}
 
+                        {/* Custom bouquet composition */}
+                        {item.compositionSummary && item.compositionSummary.length > 0 && (
+                          <div className="mb-2 space-y-0.5">
+                            {item.compositionSummary.map((line, i) => (
+                              <p key={i} className="text-[11px] text-neutral-500">
+                                {line.label} <span className="text-neutral-400">{line.value}</span>
+                              </p>
+                            ))}
+                            {item.hasCard && (
+                              <p className="text-[11px] text-neutral-500">✉ Card included</p>
+                            )}
+                          </div>
+                        )}
+
                         <div className="flex items-center justify-between">
                           {/* Quantity Controls */}
                           <div className="flex items-center space-x-2">
@@ -253,6 +267,20 @@ export function CartDrawer() {
                           <p className="text-sm text-gray-500 mb-3">
                             {item.variant.name} {item.variant.color ? `| ${item.variant.color}` : ''}
                           </p>
+                        )}
+
+                        {/* Custom bouquet composition */}
+                        {item.compositionSummary && item.compositionSummary.length > 0 && (
+                          <div className="mb-3 space-y-0.5">
+                            {item.compositionSummary.map((line, i) => (
+                              <p key={i} className="text-xs text-neutral-500">
+                                {line.label} <span className="text-neutral-400">{line.value}</span>
+                              </p>
+                            ))}
+                            {item.hasCard && (
+                              <p className="text-xs text-neutral-500">✉ Card included</p>
+                            )}
+                          </div>
                         )}
 
                         <div className="flex items-center justify-between mb-3">

@@ -202,11 +202,21 @@ export default function CheckoutPage() {
     setIsSubmitting(true);
 
     try {
-      const orderItems = state.items.map((item) => ({
-        productId: item.id,
-        variantId: item.variantId || item.id,
-        quantity: item.quantity,
-      }));
+      // Bouquet lines send their configuration instead of a product/variant
+      // pair; the server re-prices them from the database.
+      const orderItems = state.items.map((item) =>
+        item.kind === 'bouquet' && item.customization
+          ? {
+              kind: 'bouquet' as const,
+              config: item.customization,
+              quantity: item.quantity,
+            }
+          : {
+              productId: item.id,
+              variantId: item.variantId || item.id,
+              quantity: item.quantity,
+            }
+      );
 
       const res = await fetch('/api/orders', {
         method: 'POST',
