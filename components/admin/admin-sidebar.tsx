@@ -5,21 +5,13 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard,
-  Package,
-  FolderTree,
-  ShoppingCart,
-  Tag,
-  MessageSquare,
-  Mail,
-  BarChart3,
-  Sparkles,
   Settings,
   ChevronRight,
   ChevronDown,
   LogOut,
   Store,
 } from 'lucide-react';
+import { adminNavGroups } from '@/config/admin-navigation';
 
 // ─── ShopWarda Navigation Config ──────────────────────────────
 
@@ -29,17 +21,16 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string; strokeWidth?: number | string }>;
 };
 
-const NAV_ITEMS: NavItem[] = [
-  { title: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-  { title: 'Products', href: '/admin/products', icon: Package },
-  { title: 'Categories', href: '/admin/categories', icon: FolderTree },
-  { title: 'Orders', href: '/admin/orders', icon: ShoppingCart },
-  { title: 'Promo Codes', href: '/admin/promo-codes', icon: Tag },
-  { title: 'Contacts', href: '/admin/contacts', icon: MessageSquare },
-  { title: 'Subscribers', href: '/admin/subscriptions', icon: Mail },
-  { title: 'Funnel', href: '/admin/funnel', icon: BarChart3 },
-  { title: "Whats New", href: '/admin/whats-new', icon: Sparkles },
-];
+// Derived from the shared config so a new admin section shows up here and in
+// the mobile nav automatically. Both used to hardcode their own copy, which is
+// why Bouquet Builder and Wrapping Paper never appeared in either.
+const NAV_ITEMS: NavItem[] = adminNavGroups.flatMap((group) =>
+  group.items.map((item) => ({
+    title: item.label,
+    href: item.href,
+    icon: item.icon,
+  }))
+);
 
 const SETTINGS_CHILDREN = [
   { title: 'General', href: '/admin/settings' },

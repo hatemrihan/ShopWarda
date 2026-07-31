@@ -87,6 +87,13 @@ export default function CheckoutPage() {
   // retries (so a lost response de-duplicates server-side) and cleared after a
   // successful order, so the same customer can re-order identical items later.
   const idempotencyKeyRef = useRef<string>('');
+
+  // Set the instant an order succeeds, so the empty-cart guards above and
+  // below stand down while we navigate to the confirmation page. A ref, not
+  // state: it must be visible to the effect synchronously.
+  const orderPlacedRef = useRef(false);
+  // Mirrored into state for the render branch — refs must not be read during render.
+  const [orderPlaced, setOrderPlaced] = useState(false);
   const getIdempotencyKey = (): string => {
     if (!idempotencyKeyRef.current) {
       idempotencyKeyRef.current =
@@ -132,8 +139,12 @@ export default function CheckoutPage() {
   }, [isLoaded]);
 
   // ── Redirect if cart is empty ───────────────────────────────
+  // Skipped once an order is placed. clearCart() empties the cart, which used
+  // to trip this redirect to /cart — and /cart bounces an empty cart to /shop.
+  // That client-side navigation beat the slower full-page navigation to the
+  // confirmation page, so buyers landed on the shop instead of their receipt.
   useEffect(() => {
-    if (isLoaded && totalItems === 0) {
+    if (isLoaded && totalItems === 0 && !orderPlacedRef.current) {
       router.replace('/cart');
     }
   }, [isLoaded, totalItems, router]);
@@ -261,8 +272,11 @@ export default function CheckoutPage() {
           content_ids: state.items.map((i) => i.id),
         });
 
+        orderPlacedRef.current = true;
+        setOrderPlaced(true);
         clearCart();
         window.location.href = `/checkout/success/${data.order.orderId}`;
+        return;
       } else {
         alert(data.error || 'Failed to place order. Please try again.');
       }
@@ -288,6 +302,18 @@ export default function CheckoutPage() {
             <Skeleton className="h-96 w-full rounded-2xl" />
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // Order placed: the cart is empty but we are navigating to the receipt.
+  // Show a hand-off state rather than flashing an empty checkout.
+  if (orderPlaced) {
+    return (
+      <div className="bg-white min-h-[60vh] flex items-center justify-center px-4">
+        <p className="text-xs uppercase tracking-widest text-neutral-500">
+          Taking you to your confirmation…
+        </p>
       </div>
     );
   }

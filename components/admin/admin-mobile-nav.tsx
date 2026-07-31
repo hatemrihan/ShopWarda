@@ -5,16 +5,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard,
-  Package,
-  FolderTree,
-  ShoppingCart,
-  Tag,
-  MessageSquare,
-  Mail,
-  BarChart3,
-  Sparkles,
-  Settings,
   LogOut,
   Menu,
   X,
@@ -28,6 +18,7 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
+import { adminNavGroups } from '@/config/admin-navigation';
 
 // ─── Navigation Config ────────────────────────────────────────
 
@@ -37,18 +28,14 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
 };
 
-const NAV_ITEMS: NavItem[] = [
-  { title: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-  { title: 'Products', href: '/admin/products', icon: Package },
-  { title: 'Categories', href: '/admin/categories', icon: FolderTree },
-  { title: 'Orders', href: '/admin/orders', icon: ShoppingCart },
-  { title: 'Promo Codes', href: '/admin/promo-codes', icon: Tag },
-  { title: 'Contacts', href: '/admin/contacts', icon: MessageSquare },
-  { title: 'Subscribers', href: '/admin/subscriptions', icon: Mail },
-  { title: 'Funnel', href: '/admin/funnel', icon: BarChart3 },
-  { title: "Whats New", href: '/admin/whats-new', icon: Sparkles },
-  { title: 'Settings', href: '/admin/settings', icon: Settings },
-];
+// Shared with the desktop sidebar — see config/admin-navigation.ts.
+const NAV_ITEMS: NavItem[] = adminNavGroups.flatMap((group) =>
+  group.items.map((item) => ({
+    title: item.label,
+    href: item.href,
+    icon: item.icon,
+  }))
+);
 
 // ─── Component ────────────────────────────────────────────────
 
