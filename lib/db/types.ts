@@ -153,7 +153,7 @@ export interface IOrderItem {
 export interface IEgyptAddress {
   governorate: string;
   city: string;
-  area: string;
+  area?: string;
   street: string;
   building: string;
   floor?: string;

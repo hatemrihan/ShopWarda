@@ -38,6 +38,11 @@ export async function connectDB(): Promise<typeof mongoose> {
   if (!cached.promise) {
     cached.promise = mongoose.connect(MONGODB_URI!, {
       bufferCommands: false,
+      // Fail fast instead of hanging a serverless invocation until it times out.
+      serverSelectionTimeoutMS: 8000,
+      maxPoolSize: 10,
+      retryWrites: true,
+      appName: 'shopwarda-web',
     });
   }
 

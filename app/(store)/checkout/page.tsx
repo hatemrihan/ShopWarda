@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useCart } from '@/features/cart/context/cart-context';
@@ -82,11 +82,26 @@ export default function CheckoutPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // ── Idempotency ─────────────────────────────────────────────
+  // One key per checkout attempt. It is deliberately kept across failed
+  // retries (so a lost response de-duplicates server-side) and cleared after a
+  // successful order, so the same customer can re-order identical items later.
+  const idempotencyKeyRef = useRef<string>('');
+  const getIdempotencyKey = (): string => {
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+    return idempotencyKeyRef.current;
+  };
+
   // ── Fetch payment settings on mount ─────────────────────────
   useEffect(() => {
     async function fetchPaymentSettings() {
       try {
-        const res = await fetch('/api/admin/payment-settings');
+        const res = await fetch('/api/payment-settings');
         const data = await res.json();
         if (data.success) {
           setPaymentSettings(data.settings);
@@ -216,6 +231,7 @@ export default function CheckoutPage() {
           },
           items: orderItems,
           paymentMethod,
+          idempotencyKey: getIdempotencyKey(),
           promoCode: promoApplied || undefined,
           deliveryNotes: customerInfo.deliveryNotes || undefined,
           instaPayAssetKey: instaPayAssetKey || undefined,
@@ -225,6 +241,10 @@ export default function CheckoutPage() {
       const data = await res.json();
 
       if (data.success) {
+        // Retire the key so a future order for the same items is not treated
+        // as a duplicate of this one.
+        idempotencyKeyRef.current = '';
+
         track('Purchase', {
           value: totalPrice * 100,
           num_items: totalItems,

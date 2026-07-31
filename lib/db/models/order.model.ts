@@ -34,6 +34,7 @@ export interface IOrder extends Document {
   deliveryNotes?: string;
   customerNote?: string;
   adminNote?: string;
+  emailStatus?: { customer?: string; admin?: string };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -79,7 +80,9 @@ const egyptAddressSchema = new Schema<IEgyptAddress>(
   {
     governorate: { type: String, required: true },
     city: { type: String, required: true },
-    area: { type: String, required: true },
+    // Optional: the checkout UI does not mark Area as required, and Mongoose
+    // rejects '' under `required: true` — which used to 500 the whole order.
+    area: { type: String, default: '' },
     street: { type: String, required: true },
     building: { type: String, required: true },
     floor: String,
@@ -186,6 +189,19 @@ const orderSchema = new Schema<IOrder>(
     deliveryNotes: { type: String, trim: true },
     customerNote: { type: String, trim: true },
     adminNote: { type: String, trim: true },
+
+    // Outcome of the post-response email dispatch, so failures are visible in
+    // the admin panel instead of only in the function logs.
+    emailStatus: {
+      type: new Schema(
+        {
+          customer: String,
+          admin: String,
+        },
+        { _id: false },
+      ),
+      required: false,
+    },
   },
   {
     timestamps: true,

@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import crypto from 'crypto';
+import type { Types } from 'mongoose';
 import connectDB from '@/lib/db/mongoose';
 import { Order } from '@/lib/db/models/order.model';
 import { Product } from '@/lib/db/models/product.model';
@@ -77,11 +78,24 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Generate idempotency key ──────────────────────────────
+    // The client sends a UUID per checkout attempt. Without one we fall back to
+    // a content hash bucketed by day — the old key was content-only, so a
+    // returning customer re-ordering the same items was silently rejected as a
+    // duplicate forever and no new order was ever created.
     const orderInputs = items as OrderItemInput[];
-    const idempotencyData = JSON.stringify({
-      phone: customer.phone,
-      items: orderInputs.map((i) => `${i.productId}:${i.variantId}:${i.quantity}`).sort(),
-    });
+    const clientKey =
+      typeof body.idempotencyKey === 'string' && body.idempotencyKey.trim()
+        ? body.idempotencyKey.trim().slice(0, 200)
+        : null;
+
+    const idempotencyData = clientKey
+      ? `key:${clientKey}`
+      : JSON.stringify({
+          phone: customer.phone,
+          items: orderInputs.map((i) => `${i.productId}:${i.variantId}:${i.quantity}`).sort(),
+          day: new Date().toISOString().slice(0, 10),
+        });
+
     const idempotencyKeyHash = crypto
       .createHash('sha256')
       .update(idempotencyData)
@@ -99,6 +113,13 @@ export async function POST(req: NextRequest) {
 
     // ── Validate stock and build order items ──────────────────
     const orderItems: IOrderItem[] = [];
+    // Stock decrements target the *resolved* variant, not the client-supplied
+    // variantId — those can differ when the fallback below kicks in.
+    const stockDecrements: {
+      productId: Types.ObjectId;
+      variantId: Types.ObjectId;
+      quantity: number;
+    }[] = [];
     let subtotalMinor = 0;
 
     for (const item of orderInputs) {
@@ -154,6 +175,14 @@ export async function POST(req: NextRequest) {
       const imageUrl =
         product.media.find((m: IProductMedia) => m.type === 'image')?.publicUrl ?? undefined;
 
+      if (variant.trackInventory && variant._id) {
+        stockDecrements.push({
+          productId: product._id,
+          variantId: variant._id,
+          quantity: item.quantity,
+        });
+      }
+
       orderItems.push({
         sourceProductId: product._id,
         sourceVariantId: variant._id,
@@ -189,6 +218,9 @@ export async function POST(req: NextRequest) {
     // ── Apply promo code ──────────────────────────────────────
     let discountMinor = 0;
     let appliedPromoCode: string | undefined;
+    // Deferred until the order actually exists — incrementing here burned a
+    // usage even when Order.create() went on to throw.
+    let promoIdToIncrement: Types.ObjectId | null = null;
 
     if (body.promoCode) {
       const promo = await Promotion.findOne({
@@ -214,12 +246,7 @@ export async function POST(req: NextRequest) {
             }
 
             appliedPromoCode = promo.code;
-
-            // Increment usage count
-            await Promotion.updateOne(
-              { _id: promo._id },
-              { $inc: { usageCount: 1 } },
-            );
+            promoIdToIncrement = promo._id;
           }
         }
       }
@@ -280,12 +307,40 @@ export async function POST(req: NextRequest) {
       status: 'new',
     });
 
+    // ── Burn promo usage (only now that the order exists) ─────
+    if (promoIdToIncrement) {
+      try {
+        await Promotion.updateOne(
+          { _id: promoIdToIncrement },
+          { $inc: { usageCount: 1 } },
+        );
+      } catch (err) {
+        console.error(`[POST /api/orders] promo usage increment failed for order ${order.orderNumber}`, err);
+      }
+    }
+
     // ── Decrement stock ───────────────────────────────────────
-    for (const item of items) {
-      await Product.updateOne(
-        { _id: item.productId, 'variants._id': item.variantId },
-        { $inc: { 'variants.$.stock': -item.quantity } },
-      );
+    // Guarded: only decrements when the variant still holds enough stock, so
+    // concurrent orders cannot drive it negative. A miss is logged and
+    // tolerated — the order stands (arrangements are made to order).
+    for (const dec of stockDecrements) {
+      try {
+        const result = await Product.updateOne(
+          {
+            _id: dec.productId,
+            variants: { $elemMatch: { _id: dec.variantId, stock: { $gte: dec.quantity } } },
+          },
+          { $inc: { 'variants.$.stock': -dec.quantity } },
+        );
+
+        if (result.modifiedCount === 0) {
+          console.warn(
+            `[POST /api/orders] stock decrement missed for order ${order.orderNumber} — product ${String(dec.productId)}, variant ${String(dec.variantId)}, qty ${dec.quantity}`,
+          );
+        }
+      } catch (err) {
+        console.error(`[POST /api/orders] stock decrement failed for order ${order.orderNumber}`, err);
+      }
     }
 
     // ── Send Order Emails (Customer & Admin) ─────────────────
@@ -316,12 +371,33 @@ export async function POST(req: NextRequest) {
       customerPhone: customer.phone.trim(),
     };
 
-    // Await email dispatch so Resend errors and confirmations are captured
-    const emailResults = await Promise.allSettled([
-      sendOrderConfirmationEmail(emailData),
-      sendAdminOrderNotification(emailData),
-    ]);
-    console.log('📧 Order Email Dispatch Results:', JSON.stringify(emailResults, null, 2));
+    // Dispatch emails *after* the response — a slow Resend call must not add
+    // seconds to checkout or risk a function timeout once the order exists.
+    // The outcome is persisted on the order so failures surface in admin.
+    after(async () => {
+      const [customerResult, adminResult] = await Promise.allSettled([
+        sendOrderConfirmationEmail(emailData),
+        sendAdminOrderNotification(emailData),
+      ]);
+
+      const describe = (r: PromiseSettledResult<{ success: boolean; error?: string }>): string => {
+        if (r.status === 'rejected') return `failed: ${String(r.reason)}`;
+        return r.value.success ? 'sent' : `failed: ${r.value.error ?? 'unknown error'}`;
+      };
+
+      const emailStatus = {
+        customer: emailData.customerEmail ? describe(customerResult) : 'skipped: no customer email',
+        admin: describe(adminResult),
+      };
+
+      console.log(`📧 Order #${order.orderNumber} email dispatch:`, emailStatus);
+
+      try {
+        await Order.updateOne({ _id: order._id }, { $set: { emailStatus } });
+      } catch (err) {
+        console.error(`[POST /api/orders] failed to persist emailStatus for ${order.orderNumber}`, err);
+      }
+    });
 
     return NextResponse.json({
       success: true,
@@ -398,6 +474,26 @@ interface OrderRaw {
 }
 
 /**
+ * Build a URL for an InstaPay proof from the *configured* storage, rather than
+ * the hardcoded bucket of an unrelated project that used to be here.
+ *
+ * Note: proofs live in the private bucket, so this URL is not publicly
+ * readable — rendering it in admin needs a presigned read
+ * (`generatePresignedReadUrl`). Deferred until this route is behind
+ * `requireAdmin()`, so we don't hand out working proof links on a public
+ * endpoint in the meantime.
+ */
+function buildProofUrl(assetKey: string): string {
+  const cdnUrl = process.env.CLOUDFRONT_URL;
+  if (cdnUrl) return `${cdnUrl.replace(/\/$/, '')}/${assetKey}`;
+
+  const bucket =
+    process.env.S3_BUCKET_PRIVATE || process.env.S3_BUCKET_PUBLIC || 'shopwarda-media';
+  const region = process.env.AWS_REGION || 'us-east-1';
+  return `https://${bucket}.s3.${region}.amazonaws.com/${assetKey}`;
+}
+
+/**
  * GET /api/orders
  * Returns all orders formatted for admin panel with all fields.
  */
@@ -435,7 +531,7 @@ export async function GET() {
       payment_screenshot: o.payment?.instaPayAssetKey
         ? (o.payment.instaPayAssetKey.startsWith('http')
             ? o.payment.instaPayAssetKey
-            : `https://alkady.s3.us-east-1.amazonaws.com/${o.payment.instaPayAssetKey}`)
+            : buildProofUrl(o.payment.instaPayAssetKey))
         : null,
       shipping_address: {
         address: (o.address?.street || o.shippingAddress?.street) ? `${o.address?.street || o.shippingAddress?.street}${ (o.address?.building || o.shippingAddress?.building) ? `, Bldg ${o.address?.building || o.shippingAddress?.building}` : ''}` : '',

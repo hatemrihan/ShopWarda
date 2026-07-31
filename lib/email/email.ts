@@ -11,14 +11,22 @@ function getResend(): Resend {
 function getFromEmail(): string {
   const rawFromEnv = process.env.RESEND_FROM_EMAIL || '';
   if (!rawFromEnv || rawFromEnv.includes('yourdomain.com')) {
+    console.error(
+      '⚠️ RESEND_FROM_EMAIL is not configured — falling back to the shared Resend sandbox sender. ' +
+        'Delivery to real customers requires a verified domain in the Resend dashboard.',
+    );
     return 'Warda <onboarding@resend.dev>';
   }
   return rawFromEnv;
 }
 
+/**
+ * Test mode is opt-in ONLY. It used to be inferred from a missing
+ * RESEND_FROM_EMAIL, which silently rerouted every customer and admin email in
+ * production to a single hardcoded inbox.
+ */
 function isTestMode(): boolean {
-  const fromEmail = getFromEmail();
-  return process.env.RESEND_TEST_MODE === 'true' || !process.env.RESEND_FROM_EMAIL || fromEmail.includes('resend.dev');
+  return process.env.RESEND_TEST_MODE === 'true';
 }
 
 // ─── Types ────────────────────────────────────────────────────
@@ -80,7 +88,7 @@ export async function sendNewsletterEmail(input: SendNewsletterInput): Promise<S
     const batch = recipients.slice(i, i + BATCH_SIZE);
 
     try {
-      await getResend().batch.send(
+      const res = await getResend().batch.send(
         batch.map((email) => ({
           from: getFromEmail(),
           to: email,
@@ -88,6 +96,13 @@ export async function sendNewsletterEmail(input: SendNewsletterInput): Promise<S
           html: buildNewsletterHtml(heading, message),
         }))
       );
+
+      if (res.error) {
+        console.error(`❌ Batch send rejected (${i}–${i + batch.length}):`, res.error);
+        failed += batch.length;
+        continue;
+      }
+
       sent += batch.length;
     } catch (err) {
       console.error(`❌ Batch send failed (${i}–${i + batch.length}):`, err);
@@ -108,10 +123,26 @@ export async function sendNewsletterEmail(input: SendNewsletterInput): Promise<S
 
 function sanitizeRecipients(recipients: string[]): string[] {
   if (isTestMode()) {
-    const verifiedTestEmail = process.env.RESEND_TEST_RECIPIENT || 'hatemsurf@gmail.com';
+    const verifiedTestEmail = process.env.RESEND_TEST_RECIPIENT;
+    if (!verifiedTestEmail) {
+      console.warn('⚠️ RESEND_TEST_MODE is on but RESEND_TEST_RECIPIENT is unset — using real recipients.');
+      return recipients;
+    }
+    console.warn(`⚠️ RESEND_TEST_MODE is on — rerouting ${recipients.length} recipient(s) to ${verifiedTestEmail}`);
     return [verifiedTestEmail];
   }
   return recipients;
+}
+
+/** Resend v6 resolves `{ data, error }` — it does NOT throw on API errors. */
+function describeResendError(error: unknown): string {
+  if (!error) return 'Unknown Resend error';
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'object') {
+    const e = error as { name?: string; message?: string };
+    return [e.name, e.message].filter(Boolean).join(': ') || JSON.stringify(error);
+  }
+  return String(error);
 }
 
 // ─── Order Confirmation Email (to customer — only if email exists) ────
@@ -144,7 +175,14 @@ export async function sendOrderConfirmationEmail(data: OrderEmailData): Promise<
       subject: `Order Confirmed — #${data.orderId}`,
       html,
     });
-    console.log('✅ Customer email sent:', res);
+
+    if (res.error) {
+      const message = describeResendError(res.error);
+      console.error(`❌ Customer email rejected by Resend for order #${data.orderId}:`, res.error);
+      return { success: false, error: message };
+    }
+
+    console.log(`✅ Customer email sent for order #${data.orderId}:`, res.data?.id);
     return { success: true };
   } catch (err) {
     console.error('❌ Customer email failed:', err);
@@ -188,7 +226,14 @@ export async function sendAdminOrderNotification(data: OrderEmailData): Promise<
       subject: `New Order #${data.orderId} — ${data.customerName} — L.E ${data.totalAmount.toLocaleString()}`,
       html,
     });
-    console.log('✅ Admin notification email sent successfully:', res);
+
+    if (res.error) {
+      const message = describeResendError(res.error);
+      console.error(`❌ Admin notification rejected by Resend for order #${data.orderId}:`, res.error);
+      return { success: false, error: message };
+    }
+
+    console.log(`✅ Admin notification sent for order #${data.orderId}:`, res.data?.id);
     return { success: true };
   } catch (err) {
     console.error('❌ Admin notification email failed:', err);
