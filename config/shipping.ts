@@ -40,21 +40,12 @@ export const EGYPT_GOVERNORATES: ShippingRate[] = [
   { governorate: 'New Valley', feeMinor: 9000, estimatedDays: 6, enabled: true },
 ];
 
-export function getShippingFee(governorate: string): number {
-  const zone = EGYPT_GOVERNORATES.find(
-    (z) => z.governorate.toLowerCase() === governorate.toLowerCase() && z.enabled
-  );
-  if (!zone) throw new Error(`Shipping not available to ${governorate}`);
-  return zone.feeMinor;
-}
-
-export function getEstimatedDays(governorate: string): number {
-  const zone = EGYPT_GOVERNORATES.find(
-    (z) => z.governorate.toLowerCase() === governorate.toLowerCase() && z.enabled
-  );
-  return zone?.estimatedDays ?? 5;
-}
-
+/**
+ * Shipping fees are configured per-governorate in store settings and read from
+ * the database at checkout (see features/checkout/server/order.service.ts).
+ * The hardcoded feeMinor/estimatedDays above remain only as seed defaults for
+ * the governorate list; do not price orders from them.
+ */
 export function getEnabledGovernorates(): string[] {
   return EGYPT_GOVERNORATES.filter((z) => z.enabled).map((z) => z.governorate);
 }

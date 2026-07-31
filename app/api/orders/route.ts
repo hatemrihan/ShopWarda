@@ -1,32 +1,12 @@
 import { NextRequest, NextResponse, after } from 'next/server';
-import crypto from 'crypto';
-import type { Types } from 'mongoose';
 import connectDB from '@/lib/db/mongoose';
 import { Order } from '@/lib/db/models/order.model';
-import { Product } from '@/lib/db/models/product.model';
-import { Promotion } from '@/lib/db/models/promotion.model';
-import { getNextSequence } from '@/lib/db/models/counter.model';
-import { getSettings } from '@/lib/db/models/store-settings.model';
 import { sendOrderConfirmationEmail, sendAdminOrderNotification } from '@/lib/email/email';
 import { guardAdmin, getClientIp } from '@/lib/auth/api-guard';
 import { checkRateLimit, checkoutLimiter } from '@/lib/security/rate-limit';
-import { RateLimitError } from '@/lib/errors';
+import { RateLimitError, ValidationError } from '@/lib/errors';
 import { ORDER_STATUS } from '@/lib/db/types';
-import type {
-  IOrderItem,
-  IEgyptAddress,
-  PaymentMethod,
-  IVariant,
-  IOptionDefinition,
-  IOptionValue,
-  IProductMedia,
-} from '@/lib/db/types';
-
-interface OrderItemInput {
-  productId: string;
-  variantId: string;
-  quantity: number;
-}
+import { orderService, type PlaceOrderInput } from '@/features/checkout/server/order.service';
 
 /**
  * POST /api/orders
@@ -50,338 +30,24 @@ export async function POST(req: NextRequest) {
     // Public route (guest checkout) — rate limited per IP. No-ops without Upstash.
     await checkRateLimit(checkoutLimiter, `orders:${getClientIp(req)}`);
 
-    await connectDB();
-    const body = await req.json();
+    const body = (await req.json()) as PlaceOrderInput;
 
-    // ── Validate required fields ──────────────────────────────
-    const { customer, address, items, paymentMethod } = body;
+    const result = await orderService.placeOrder(body);
 
-    if (!customer?.name || !customer?.phone) {
-      return NextResponse.json(
-        { success: false, error: 'Customer name and phone are required' },
-        { status: 400 },
-      );
-    }
-
-    if (!address?.governorate || !address?.city || !address?.street) {
-      return NextResponse.json(
-        { success: false, error: 'Complete address is required' },
-        { status: 400 },
-      );
-    }
-
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'Order must have at least one item' },
-        { status: 400 },
-      );
-    }
-
-    if (!paymentMethod || !['cod', 'instapay'].includes(paymentMethod)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid payment method' },
-        { status: 400 },
-      );
-    }
-
-    // ── Generate idempotency key ──────────────────────────────
-    // The client sends a UUID per checkout attempt. Without one we fall back to
-    // a content hash bucketed by day — the old key was content-only, so a
-    // returning customer re-ordering the same items was silently rejected as a
-    // duplicate forever and no new order was ever created.
-    const orderInputs = items as OrderItemInput[];
-    const clientKey =
-      typeof body.idempotencyKey === 'string' && body.idempotencyKey.trim()
-        ? body.idempotencyKey.trim().slice(0, 200)
-        : null;
-
-    const idempotencyData = clientKey
-      ? `key:${clientKey}`
-      : JSON.stringify({
-          phone: customer.phone,
-          items: orderInputs.map((i) => `${i.productId}:${i.variantId}:${i.quantity}`).sort(),
-          day: new Date().toISOString().slice(0, 10),
-        });
-
-    const idempotencyKeyHash = crypto
-      .createHash('sha256')
-      .update(idempotencyData)
-      .digest('hex');
-
-    // Check for duplicate order
-    const existingOrder = await Order.findOne({ idempotencyKeyHash });
-    if (existingOrder) {
+    if (result.duplicate) {
       return NextResponse.json({
         success: true,
-        order: { orderId: existingOrder.orderNumber },
+        order: { orderId: result.orderNumber },
         duplicate: true,
       });
     }
-
-    // ── Validate stock and build order items ──────────────────
-    const orderItems: IOrderItem[] = [];
-    // Stock decrements target the *resolved* variant, not the client-supplied
-    // variantId — those can differ when the fallback below kicks in.
-    const stockDecrements: {
-      productId: Types.ObjectId;
-      variantId: Types.ObjectId;
-      quantity: number;
-    }[] = [];
-    let subtotalMinor = 0;
-
-    for (const item of orderInputs) {
-      const product = await Product.findById(item.productId);
-      if (!product || product.status !== 'active') {
-        return NextResponse.json(
-          { success: false, error: `Product not found: ${item.productId}` },
-          { status: 400 },
-        );
-      }
-
-      let variant = product.variants.find(
-        (v: IVariant) => v._id?.toString() === item.variantId
-      );
-
-      // Fallback: if variantId is product.id or doesn't match sub-variant _id, pick first active variant
-      if (!variant) {
-        variant = product.variants.find((v: IVariant) => v.status === 'active')
-               || product.variants[0];
-      }
-
-      if (!variant || variant.status !== 'active') {
-        return NextResponse.json(
-          { success: false, error: `Variant not available for product: ${product.name}` },
-          { status: 400 },
-        );
-      }
-
-      if (variant.trackInventory && variant.stock < item.quantity) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `Insufficient stock for ${product.name}. Available: ${variant.stock}`,
-          },
-          { status: 400 },
-        );
-      }
-
-      const lineTotalMinor = variant.priceMinor * item.quantity;
-      subtotalMinor += lineTotalMinor;
-
-      // Build selected options label
-      const selectedOptions = variant.optionValues.map((ov) => {
-        const optionDef = product.options.find((o: IOptionDefinition) => o.key === ov.optionKey);
-        const valueDef = optionDef?.values.find((v: IOptionValue) => v.key === ov.valueKey);
-        return {
-          label: optionDef?.label ?? ov.optionKey,
-          value: valueDef?.label ?? ov.valueKey,
-        };
-      });
-
-      // Get first image
-      const imageUrl =
-        product.media.find((m: IProductMedia) => m.type === 'image')?.publicUrl ?? undefined;
-
-      if (variant.trackInventory && variant._id) {
-        stockDecrements.push({
-          productId: product._id,
-          variantId: variant._id,
-          quantity: item.quantity,
-        });
-      }
-
-      orderItems.push({
-        sourceProductId: product._id,
-        sourceVariantId: variant._id,
-        sku: variant.sku,
-        productName: product.name,
-        productSlug: product.slug,
-        selectedOptions,
-        imageUrl,
-        quantity: item.quantity,
-        unitPriceMinor: variant.priceMinor,
-        lineTotalMinor,
-      });
-    }
-
-    // ── Calculate shipping ────────────────────────────────────
-    const settings = await getSettings();
-    const zone = settings.shippingZones.find(
-      (z) => z.governorate === address.governorate && z.enabled
-    );
-    const shippingMinor = zone?.feeMinor ?? 0;
-
-    // ── Free delivery check ───────────────────────────────────
-    const freeThreshold = settings.freeDeliveryThresholdMinor;
-    const finalShippingMinor =
-      freeThreshold && subtotalMinor >= freeThreshold ? 0 : shippingMinor;
-
-    // ── COD fee ───────────────────────────────────────────────
-    let codFeeMinor = 0;
-    if (paymentMethod === 'cod' && zone?.codFeeMinor) {
-      codFeeMinor = zone.codFeeMinor;
-    }
-
-    // ── Apply promo code ──────────────────────────────────────
-    let discountMinor = 0;
-    let appliedPromoCode: string | undefined;
-    // Deferred until the order actually exists — incrementing here burned a
-    // usage even when Order.create() went on to throw.
-    let promoIdToIncrement: Types.ObjectId | null = null;
-
-    if (body.promoCode) {
-      const promo = await Promotion.findOne({
-        code: body.promoCode.toUpperCase().trim(),
-        status: 'active',
-      });
-
-      if (promo) {
-        const now = new Date();
-        if (
-          now >= promo.validFrom &&
-          now <= promo.validUntil &&
-          (!promo.usageLimit || promo.usageCount < promo.usageLimit)
-        ) {
-          if (!promo.minOrderMinor || subtotalMinor >= promo.minOrderMinor) {
-            if (promo.type === 'percentage') {
-              discountMinor = Math.round(subtotalMinor * (promo.value / 100));
-              if (promo.maxDiscountMinor) {
-                discountMinor = Math.min(discountMinor, promo.maxDiscountMinor);
-              }
-            } else {
-              discountMinor = Math.min(promo.value, subtotalMinor);
-            }
-
-            appliedPromoCode = promo.code;
-            promoIdToIncrement = promo._id;
-          }
-        }
-      }
-    }
-
-    // ── Calculate total ───────────────────────────────────────
-    const totalMinor = subtotalMinor - discountMinor + finalShippingMinor + codFeeMinor;
-
-    // ── Generate order number ─────────────────────────────────
-    const orderNumber = await getNextSequence('orderNumber');
-
-    // ── Create order ──────────────────────────────────────────
-    const order = await Order.create({
-      orderNumber,
-      idempotencyKeyHash,
-      guest: {
-        name: customer.name.trim(),
-        phone: customer.phone.trim(),
-        email: customer.email?.trim().toLowerCase(),
-      },
-      address: {
-        governorate: address.governorate,
-        city: address.city,
-        area: address.area ?? '',
-        street: address.street,
-        building: address.building,
-        floor: address.floor,
-        apartment: address.apartment,
-        landmark: address.landmark,
-        lat: address.lat,
-        lng: address.lng,
-      } as IEgyptAddress,
-      items: orderItems,
-      pricing: {
-        subtotalMinor,
-        discountMinor,
-        shippingMinor: finalShippingMinor + codFeeMinor,
-        totalMinor,
-        currency: 'EGP' as const,
-      },
-      payment: {
-        method: paymentMethod as PaymentMethod,
-        status: paymentMethod === 'instapay' && body.instaPayAssetKey
-          ? 'proof_uploaded'
-          : 'pending',
-        ...(paymentMethod === 'instapay' && body.instaPayAssetKey
-          ? {
-            instaPayAssetKey: body.instaPayAssetKey,
-            instaPayMime: body.instaPayMime,
-            instaPaySize: body.instaPaySize,
-            instaPayUploadedAt: new Date(),
-          }
-          : {}),
-      },
-      promotionCode: appliedPromoCode,
-      deliveryNotes: body.deliveryNotes?.trim(),
-      customerNote: body.customerNote?.trim(),
-      status: 'new',
-    });
-
-    // ── Burn promo usage (only now that the order exists) ─────
-    if (promoIdToIncrement) {
-      try {
-        await Promotion.updateOne(
-          { _id: promoIdToIncrement },
-          { $inc: { usageCount: 1 } },
-        );
-      } catch (err) {
-        console.error(`[POST /api/orders] promo usage increment failed for order ${order.orderNumber}`, err);
-      }
-    }
-
-    // ── Decrement stock ───────────────────────────────────────
-    // Guarded: only decrements when the variant still holds enough stock, so
-    // concurrent orders cannot drive it negative. A miss is logged and
-    // tolerated — the order stands (arrangements are made to order).
-    for (const dec of stockDecrements) {
-      try {
-        const result = await Product.updateOne(
-          {
-            _id: dec.productId,
-            variants: { $elemMatch: { _id: dec.variantId, stock: { $gte: dec.quantity } } },
-          },
-          { $inc: { 'variants.$.stock': -dec.quantity } },
-        );
-
-        if (result.modifiedCount === 0) {
-          console.warn(
-            `[POST /api/orders] stock decrement missed for order ${order.orderNumber} — product ${String(dec.productId)}, variant ${String(dec.variantId)}, qty ${dec.quantity}`,
-          );
-        }
-      } catch (err) {
-        console.error(`[POST /api/orders] stock decrement failed for order ${order.orderNumber}`, err);
-      }
-    }
-
-    // ── Send Order Emails (Customer & Admin) ─────────────────
-    const emailData = {
-      customerEmail: customer.email?.trim() || undefined,
-      customerName: customer.name.trim(),
-      orderId: order.orderNumber,
-      orderItems: orderItems.map((i) => ({
-        name: i.productName,
-        quantity: i.quantity,
-        price: i.unitPriceMinor / 100,
-        size: i.selectedOptions.find((o) => o.label.toLowerCase() === 'size')?.value,
-        color: i.selectedOptions.find((o) => o.label.toLowerCase() === 'color')?.value,
-      })),
-      subtotal: subtotalMinor / 100,
-      shippingCost: finalShippingMinor / 100,
-      codFee: codFeeMinor / 100,
-      discountAmount: discountMinor / 100,
-      promoCode: appliedPromoCode,
-      totalAmount: totalMinor / 100,
-      paymentMethod,
-      shippingAddress: {
-        governorate: address.governorate,
-        city: address.city,
-        address: `${address.street}${address.building ? `, Bldg ${address.building}` : ''}`,
-        apartment: address.apartment,
-      },
-      customerPhone: customer.phone.trim(),
-    };
 
     // Dispatch emails *after* the response — a slow Resend call must not add
     // seconds to checkout or risk a function timeout once the order exists.
     // The outcome is persisted on the order so failures surface in admin.
     after(async () => {
+      const { emailData } = result;
+
       const [customerResult, adminResult] = await Promise.allSettled([
         sendOrderConfirmationEmail(emailData),
         sendAdminOrderNotification(emailData),
@@ -397,21 +63,21 @@ export async function POST(req: NextRequest) {
         admin: describe(adminResult),
       };
 
-      console.log(`📧 Order #${order.orderNumber} email dispatch:`, emailStatus);
+      console.log(`\u{1F4E7} Order #${result.orderNumber} email dispatch:`, emailStatus);
 
       try {
-        await Order.updateOne({ _id: order._id }, { $set: { emailStatus } });
+        await Order.updateOne({ _id: result.orderId }, { $set: { emailStatus } });
       } catch (err) {
-        console.error(`[POST /api/orders] failed to persist emailStatus for ${order.orderNumber}`, err);
+        console.error(`[POST /api/orders] failed to persist emailStatus for ${result.orderNumber}`, err);
       }
     });
 
     return NextResponse.json({
       success: true,
       order: {
-        orderId: order.orderNumber,
-        totalMinor,
-        itemCount: orderItems.length,
+        orderId: result.orderNumber,
+        totalMinor: result.totalMinor,
+        itemCount: result.itemCount,
       },
     });
   } catch (error: unknown) {
@@ -422,9 +88,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+    }
+
     console.error('[POST /api/orders]', error);
 
-    // Handle duplicate key (idempotency)
+    // Recover from a duplicate-key race on the unique idempotency index.
     const errObj = error as { code?: number; keyValue?: { idempotencyKeyHash?: string }; keyPattern?: { idempotencyKeyHash?: number } };
     if (errObj.code === 11000 && errObj.keyPattern?.idempotencyKeyHash && errObj.keyValue?.idempotencyKeyHash) {
       const existing = await Order.findOne({
