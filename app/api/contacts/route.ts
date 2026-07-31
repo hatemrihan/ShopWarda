@@ -2,12 +2,18 @@ import { NextResponse, type NextRequest } from 'next/server';
 import connectDB from '@/lib/db/mongoose';
 import { Contact } from '@/lib/db/models/contact.model';
 import { requireAdmin } from '@/lib/auth/require-admin';
+import { checkRateLimit, contactLimiter } from '@/lib/security/rate-limit';
+import { getClientIp } from '@/lib/auth/api-guard';
+import { RateLimitError } from '@/lib/errors';
 
 /**
  * POST /api/contacts  (public – storefront contact form)
  */
 export async function POST(request: NextRequest) {
   try {
+    // Public form — rate limited per IP. No-ops without Upstash.
+    await checkRateLimit(contactLimiter, `contact:${getClientIp(request)}`);
+
     await connectDB();
     const body = await request.json();
     const { name, phone, message } = body;
@@ -49,6 +55,13 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof RateLimitError) {
+      return NextResponse.json(
+        { success: false, error: 'Too many submissions. Please try again later.' },
+        { status: 429 },
+      );
+    }
+
     const msg =
       error instanceof Error ? error.message : 'Failed to submit contact';
     return NextResponse.json(

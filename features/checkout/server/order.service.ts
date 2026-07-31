@@ -19,6 +19,7 @@ import { getNextSequence } from '@/lib/db/models/counter.model';
 import { getSettings } from '@/lib/db/models/store-settings.model';
 import { ValidationError } from '@/lib/errors';
 import logger from '@/lib/logger';
+import { computeOrderPricing, computePromoDiscount, type PricingResult } from '../pricing';
 import { priceBouquet } from '@/features/bouquet/server/bouquet.service';
 import type { BouquetConfig } from '@/features/bouquet/schemas';
 import type {
@@ -121,44 +122,16 @@ export interface OrderEmailPayload {
 }
 
 // ─── Pure pricing ───────────────────────────────────────────────
+// Lives in ../pricing.ts so the money maths stays free of database imports
+// and can be unit tested. Re-exported here for existing callers.
 
-export interface PricingInput {
-  subtotalMinor: number;
-  shippingFeeMinor: number;
-  codFeeMinor: number;
-  discountMinor: number;
-  freeDeliveryThresholdMinor?: number | null;
-}
-
-export interface PricingResult {
-  subtotalMinor: number;
-  discountMinor: number;
-  shippingMinor: number;
-  codFeeMinor: number;
-  totalMinor: number;
-}
-
-/**
- * Pure function of its inputs — no I/O — so it can be unit tested and reused
- * (the bouquet builder extends the subtotal it is handed).
- */
-export function computeOrderPricing(input: PricingInput): PricingResult {
-  const { subtotalMinor, shippingFeeMinor, codFeeMinor, discountMinor } = input;
-
-  const threshold = input.freeDeliveryThresholdMinor;
-  const shippingMinor = threshold && subtotalMinor >= threshold ? 0 : shippingFeeMinor;
-
-  const totalMinor = subtotalMinor - discountMinor + shippingMinor + codFeeMinor;
-
-  return {
-    subtotalMinor,
-    discountMinor,
-    shippingMinor,
-    codFeeMinor,
-    // An order can never be worth less than nothing.
-    totalMinor: Math.max(0, totalMinor),
-  };
-}
+export {
+  computeOrderPricing,
+  computePromoDiscount,
+  type PricingInput,
+  type PricingResult,
+  type PromoRules,
+} from '../pricing';
 
 // ─── Idempotency ────────────────────────────────────────────────
 
@@ -382,21 +355,8 @@ export const orderService = {
       });
 
       if (promo) {
-        const now = new Date();
-        const withinWindow = now >= promo.validFrom && now <= promo.validUntil;
-        const underLimit = !promo.usageLimit || promo.usageCount < promo.usageLimit;
-        const meetsMinimum =
-          !promo.minOrderMinor || subtotalMinor >= promo.minOrderMinor;
-
-        if (withinWindow && underLimit && meetsMinimum) {
-          if (promo.type === 'percentage') {
-            discountMinor = Math.round(subtotalMinor * (promo.value / 100));
-            if (promo.maxDiscountMinor) {
-              discountMinor = Math.min(discountMinor, promo.maxDiscountMinor);
-            }
-          } else {
-            discountMinor = Math.min(promo.value, subtotalMinor);
-          }
+        discountMinor = computePromoDiscount(promo, subtotalMinor);
+        if (discountMinor > 0) {
           appliedPromoCode = promo.code;
           promoIdToIncrement = promo._id;
         }

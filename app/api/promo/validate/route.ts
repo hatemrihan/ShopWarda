@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/db/mongoose';
 import { Promotion } from '@/lib/db/models/promotion.model';
+import { checkRateLimit, checkoutLimiter } from '@/lib/security/rate-limit';
+import { getClientIp } from '@/lib/auth/api-guard';
+import { RateLimitError } from '@/lib/errors';
 
 /**
  * POST /api/promo/validate
@@ -12,6 +15,9 @@ import { Promotion } from '@/lib/db/models/promotion.model';
  */
 export async function POST(req: NextRequest) {
   try {
+    // Public — rate limited per IP so codes cannot be brute-forced.
+    await checkRateLimit(checkoutLimiter, `promo:${getClientIp(req)}`);
+
     await connectDB();
     const { code, subtotalMinor } = await req.json();
 
@@ -84,6 +90,13 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof RateLimitError) {
+      return NextResponse.json(
+        { success: false, error: 'Too many attempts. Please wait a moment.' },
+        { status: 429 },
+      );
+    }
+
     console.error('[POST /api/promo/validate]', error);
     return NextResponse.json(
       { success: false, error: 'Failed to validate promo code' },
