@@ -67,6 +67,7 @@ export interface VariantDTO {
   costPiasters?: number;
   stock: number;
   lowStockThreshold: number;
+  trackInventory: boolean;
   weight?: number;
   isDefault: boolean;
   isActive: boolean;

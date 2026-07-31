@@ -44,6 +44,7 @@ interface VariantRow {
   compareAtPricePiasters?: number;
   stock: number;
   lowStockThreshold: number;
+  trackInventory: boolean;
   weight?: number;
   isDefault: boolean;
   isActive: boolean;
@@ -93,6 +94,7 @@ function generateVariantMatrix(options: OptionDef[], existing: VariantRow[] = []
       compareAtPricePiasters: carried?.compareAtPricePiasters,
       stock: carried?.stock ?? 0,
       lowStockThreshold: carried?.lowStockThreshold ?? 5,
+      trackInventory: carried?.trackInventory ?? true,
       weight: carried?.weight,
       isDefault: true,
       isActive: carried?.isActive ?? true,
@@ -116,6 +118,7 @@ function generateVariantMatrix(options: OptionDef[], existing: VariantRow[] = []
       compareAtPricePiasters: carried?.compareAtPricePiasters,
       stock: carried?.stock ?? 0,
       lowStockThreshold: carried?.lowStockThreshold ?? 5,
+      trackInventory: carried?.trackInventory ?? true,
       weight: carried?.weight,
       isDefault: carried?.isDefault ?? false,
       isActive: carried?.isActive ?? true,
@@ -224,8 +227,9 @@ export function ProductForm({ product, categories }: ProductFormProps) {
     product?.variants.map((v) => ({
       sku: v.sku || 'DEFAULT', optionValues: v.optionValues, pricePiasters: v.pricePiasters,
       compareAtPricePiasters: v.compareAtPricePiasters, stock: v.stock,
-      lowStockThreshold: v.lowStockThreshold, weight: v.weight, isDefault: v.isDefault, isActive: v.isActive,
-    })) ?? [{ sku: 'DEFAULT', optionValues: [], pricePiasters: 0, stock: 0, lowStockThreshold: 5, isDefault: true, isActive: true }]
+      lowStockThreshold: v.lowStockThreshold, trackInventory: v.trackInventory ?? true,
+      weight: v.weight, isDefault: v.isDefault, isActive: v.isActive,
+    })) ?? [{ sku: 'DEFAULT', optionValues: [], pricePiasters: 0, stock: 0, lowStockThreshold: 5, trackInventory: true, isDefault: true, isActive: true }]
   );
 
   // Media

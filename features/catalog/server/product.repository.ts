@@ -52,6 +52,7 @@ function toProductDTO(doc: IProduct, categoryNames: string[] = []): ProductDTO {
       compareAtPricePiasters: v.compareAtPriceMinor,
       stock: v.stock,
       lowStockThreshold: v.lowStockThreshold ?? 5,
+      trackInventory: v.trackInventory ?? true,
       weight: v.weightGrams,
       isDefault: doc.defaultVariantId
         ? doc.defaultVariantId.toString() === (v as { _id?: { toString(): string } })._id?.toString()

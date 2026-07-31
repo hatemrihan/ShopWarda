@@ -205,6 +205,7 @@ export const productService = {
         costPriceMinor: v.costPiasters,
         stock: v.stock,
         lowStockThreshold: v.lowStockThreshold,
+        trackInventory: v.trackInventory,
         weightGrams: v.weight,
         status: v.isActive ? 'active' : 'inactive',
       })),
@@ -283,6 +284,7 @@ export const productService = {
         compareAtPriceMinor: v.compareAtPricePiasters,
         stock: v.stock,
         lowStockThreshold: v.lowStockThreshold,
+        trackInventory: v.trackInventory,
         weightGrams: v.weight,
         status: v.isActive ? 'active' : 'inactive',
       }));

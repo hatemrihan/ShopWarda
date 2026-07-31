@@ -57,6 +57,8 @@ export const variantBaseSchema = z.object({
   costPiasters: z.number().int().min(0).optional(),
   stock: z.number().int().min(0).default(0),
   lowStockThreshold: z.number().int().min(0).default(5),
+  /** Off for made-to-order goods that should never go out of stock. */
+  trackInventory: z.boolean().default(true),
   weight: z.number().min(0).optional(),
   isDefault: z.boolean().default(false),
   isActive: z.boolean().default(true),
