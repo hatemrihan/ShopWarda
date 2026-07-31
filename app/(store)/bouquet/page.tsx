@@ -10,10 +10,20 @@ export const metadata: Metadata = {
 };
 
 export default async function BouquetPage() {
-  const catalog = await getActiveCatalog();
+  // A catalogue read failure must not fail the build or the route: this is an
+  // optional, flag-gated page, so an unreachable database means "not here".
+  const catalog = await getActiveCatalog().catch((error) => {
+    console.error('[bouquet] catalogue unavailable', error);
+    return null;
+  });
 
   // The builder ships dark. It also needs something to build with.
-  if (!catalog.settings.enabled || catalog.wraps.length === 0 || catalog.flowers.length === 0) {
+  if (
+    !catalog ||
+    !catalog.settings.enabled ||
+    catalog.wraps.length === 0 ||
+    catalog.flowers.length === 0
+  ) {
     notFound();
   }
 

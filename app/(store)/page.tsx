@@ -8,8 +8,8 @@ import { CategoryShowcaseSection } from '@/components/sections/category-showcase
 
 export default async function HomePage() {
   const [categories, products] = await Promise.all([
-    categoryService.list({ status: 'active' }),
-    productService.list(
+    categoryService.listCached({ status: 'active' }),
+    productService.listCached(
       { status: 'active', sortBy: 'createdAt', sortOrder: 'desc' },
       { page: 1, pageSize: 8 }
     ),

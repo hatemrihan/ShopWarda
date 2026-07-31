@@ -3,7 +3,7 @@
  * Money is integer piasters, like everywhere else on the server.
  */
 
-import type { BouquetSeason, BouquetStatus } from '@/lib/db/models/bouquet.model';
+import type { BouquetSeason, BouquetStatus } from '@/features/bouquet/constants';
 
 export interface FlowerColorDTO {
   key: string;

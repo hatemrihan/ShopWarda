@@ -3,7 +3,7 @@
  */
 
 import { z } from 'zod';
-import { BOUQUET_SEASONS, BOUQUET_STATUS } from '@/lib/db/models/bouquet.model';
+import { BOUQUET_SEASONS, BOUQUET_STATUS } from '@/features/bouquet/constants';
 
 const hexColor = z
   .string()

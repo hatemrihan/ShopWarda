@@ -299,6 +299,7 @@ export default function CategoriesPage() {
                                         src={cat.image_url}
                                         alt={cat.name}
                                         fill
+                                        sizes="(max-width: 640px) 50vw, 200px"
                                         className="object-contain p-2"
                                     />
                                 ) : (
@@ -399,6 +400,7 @@ export default function CategoriesPage() {
                                             alt="Preview"
                                             unoptimized
                                             fill
+                                            sizes="(max-width: 640px) 100vw, 400px"
                                             className="object-contain"
                                         />
                                     </div>

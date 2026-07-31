@@ -7,6 +7,7 @@ import { checkRateLimit, checkoutLimiter } from '@/lib/security/rate-limit';
 import { RateLimitError, ValidationError } from '@/lib/errors';
 import { ORDER_STATUS } from '@/lib/db/types';
 import { orderService, type PlaceOrderInput } from '@/features/checkout/server/order.service';
+import { captureException } from '@/lib/observability';
 
 /**
  * POST /api/orders
@@ -93,6 +94,7 @@ export async function POST(req: NextRequest) {
     }
 
     console.error('[POST /api/orders]', error);
+    captureException(error, { route: 'POST /api/orders' });
 
     // Recover from a duplicate-key race on the unique idempotency index.
     const errObj = error as { code?: number; keyValue?: { idempotencyKeyHash?: string }; keyPattern?: { idempotencyKeyHash?: number } };

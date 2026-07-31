@@ -11,7 +11,7 @@ import { Loader2, Plus, Trash2, Flower2, Package, Settings2 } from 'lucide-react
 import { toast } from 'sonner';
 
 import type { FlowerDTO, WrapDTO, BouquetSettingsDTO, FlowerColorDTO } from '@/features/bouquet/types';
-import { BOUQUET_SEASONS, type BouquetSeason, BOUQUET_STATUS, type BouquetStatus } from '@/lib/db/models/bouquet.model';
+import { BOUQUET_SEASONS, type BouquetSeason, BOUQUET_STATUS, type BouquetStatus } from '@/features/bouquet/constants';
 import {
   createFlowerAction,
   updateFlowerAction,

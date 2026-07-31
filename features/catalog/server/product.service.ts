@@ -14,6 +14,8 @@ import {
 import type { ProductDTO, ProductListItem, ProductFilter, PaginationParams, PaginatedResult } from '../types';
 import { ValidationError, NotFoundError } from '@/lib/errors';
 import { invalidateProduct, invalidateProducts } from '@/lib/cache';
+import { unstable_cache } from 'next/cache';
+import { CACHE_TAGS } from '@/lib/cache';
 import { categoryRepository } from './category.repository';
 
 // ─── Slug generation ────────────────────────────────────────────
@@ -78,12 +80,49 @@ async function validateCategoryIds(categoryIds: string[]): Promise<void> {
 
 // ─── Service ────────────────────────────────────────────────────
 
+/**
+ * Storefront reads are tag-cached. The admin services already call the
+ * lib/cache invalidation helpers on every mutation, but nothing was cached, so
+ * revalidateTag had nothing to invalidate and every page view hit MongoDB.
+ *
+ * A bounded revalidate window backs up the tags: order placement changes stock
+ * without going through the admin mutation path.
+ */
+const CATALOG_REVALIDATE_SECONDS = 300;
+
 export const productService = {
   async list(
     filter: ProductFilter = {},
     pagination?: PaginationParams
   ): Promise<PaginatedResult<ProductListItem>> {
     return productRepository.findAll(filter, pagination);
+  },
+
+  /** Cached variant of `list` for storefront pages. */
+  async listCached(
+    filter: ProductFilter = {},
+    pagination?: PaginationParams
+  ): Promise<PaginatedResult<ProductListItem>> {
+    const cached = unstable_cache(
+      () => productRepository.findAll(filter, pagination),
+      ['product-list', JSON.stringify(filter), JSON.stringify(pagination ?? {})],
+      { tags: [CACHE_TAGS.PRODUCTS], revalidate: CATALOG_REVALIDATE_SECONDS },
+    );
+    return cached();
+  },
+
+  /** Cached product detail lookup. Returns null rather than throwing so the
+   *  not-found and previous-slug redirect paths stay uncached. */
+  async findBySlugCached(slug: string): Promise<ProductDTO | null> {
+    const cached = unstable_cache(
+      () => productRepository.findBySlug(slug),
+      ['product-by-slug', slug],
+      {
+        tags: [CACHE_TAGS.PRODUCTS, CACHE_TAGS.product(slug)],
+        revalidate: CATALOG_REVALIDATE_SECONDS,
+      },
+    );
+    return cached();
   },
 
   async getById(id: string): Promise<ProductDTO> {
@@ -93,7 +132,7 @@ export const productService = {
   },
 
   async getBySlug(slug: string): Promise<ProductDTO> {
-    const product = await productRepository.findBySlug(slug);
+    const product = await this.findBySlugCached(slug);
     if (product) return product;
 
     const newSlug = await productRepository.findByPreviousSlug(slug);

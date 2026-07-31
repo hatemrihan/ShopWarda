@@ -8,7 +8,8 @@ import type { ICategory } from '@/lib/db/models/category.model';
 import { createCategorySchema, updateCategorySchema, type CreateCategoryInput, type UpdateCategoryInput } from '../schemas';
 import type { CategoryDTO, CategoryListItem, CategoryFilter } from '../types';
 import { ValidationError, NotFoundError } from '@/lib/errors';
-import { invalidateCategory, invalidateCategories } from '@/lib/cache';
+import { invalidateCategory, invalidateCategories, CACHE_TAGS } from '@/lib/cache';
+import { unstable_cache } from 'next/cache';
 
 // ─── Slug generation ────────────────────────────────────────────
 
@@ -35,9 +36,21 @@ async function ensureUniqueSlug(slug: string, excludeId?: string): Promise<strin
 
 // ─── Service ────────────────────────────────────────────────────
 
+const CATALOG_REVALIDATE_SECONDS = 300;
+
 export const categoryService = {
   async list(filter: CategoryFilter = {}): Promise<CategoryListItem[]> {
     return categoryRepository.findAll(filter);
+  },
+
+  /** Cached variant of `list` for storefront pages. */
+  async listCached(filter: CategoryFilter = {}): Promise<CategoryListItem[]> {
+    const cached = unstable_cache(
+      () => categoryRepository.findAll(filter),
+      ['category-list', JSON.stringify(filter)],
+      { tags: [CACHE_TAGS.CATEGORIES], revalidate: CATALOG_REVALIDATE_SECONDS },
+    );
+    return cached();
   },
 
   async getById(id: string): Promise<CategoryDTO> {

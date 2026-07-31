@@ -10,12 +10,16 @@
 
 import mongoose, { Schema, type Document, type Model, type Types } from 'mongoose';
 import type { IProductMedia } from '../types';
+import { BOUQUET_SEASONS, BOUQUET_STATUS, type BouquetSeason, type BouquetStatus } from '@/features/bouquet/constants';
 
-export const BOUQUET_SEASONS = ['spring', 'summer', 'autumn', 'winter'] as const;
-export type BouquetSeason = (typeof BOUQUET_SEASONS)[number];
-
-export const BOUQUET_STATUS = ['draft', 'active', 'archived'] as const;
-export type BouquetStatus = (typeof BOUQUET_STATUS)[number];
+// Enums live in features/bouquet/constants.ts so client components can import
+// them without dragging the Mongoose driver into the browser bundle.
+export {
+  BOUQUET_SEASONS,
+  BOUQUET_STATUS,
+  type BouquetSeason,
+  type BouquetStatus,
+} from '@/features/bouquet/constants';
 
 // ─── Flower colour ──────────────────────────────────────────────
 

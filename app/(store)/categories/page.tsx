@@ -26,7 +26,7 @@ export default async function CategoriesPage({ searchParams }: Props) {
   const params = await searchParams;
   const sortKey = typeof params.sort === 'string' ? params.sort : 'default';
 
-  const categories = await categoryService.list({ status: 'active' });
+  const categories = await categoryService.listCached({ status: 'active' });
 
   // Sort categories based on URL param
   const sorted = [...categories].sort((a, b) => {

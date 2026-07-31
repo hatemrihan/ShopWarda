@@ -62,7 +62,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const sort = SORT_MAP[sortKey] ?? SORT_MAP.newest;
 
   // Fetch products for this category with sort
-  const products = await productService.list(
+  const products = await productService.listCached(
     { status: 'active', categoryId: category.id, ...sort },
     { page: 1, pageSize: 24 }
   );

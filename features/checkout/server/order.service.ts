@@ -19,6 +19,7 @@ import { getNextSequence } from '@/lib/db/models/counter.model';
 import { getSettings } from '@/lib/db/models/store-settings.model';
 import { ValidationError } from '@/lib/errors';
 import logger from '@/lib/logger';
+import { invalidateProducts } from '@/lib/cache';
 import { computeOrderPricing, computePromoDiscount, type PricingResult } from '../pricing';
 import { priceBouquet } from '@/features/bouquet/server/bouquet.service';
 import type { BouquetConfig } from '@/features/bouquet/schemas';
@@ -437,6 +438,16 @@ export const orderService = {
     }
 
     await decrementStock(stockDecrements, order.orderNumber);
+
+    // Stock just changed outside the admin mutation path, so the tag-cached
+    // catalog reads must be dropped or the PDP will show stale availability.
+    if (stockDecrements.length > 0) {
+      try {
+        invalidateProducts();
+      } catch (err) {
+        logger.error('Catalog cache invalidation failed', { orderNumber: order.orderNumber, err });
+      }
+    }
 
     return {
       duplicate: false,

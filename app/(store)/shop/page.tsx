@@ -42,7 +42,7 @@ export default async function ShopPage({ searchParams }: Props) {
   const categoryIds = Array.isArray(params.cat) ? params.cat : (params.cat ? [params.cat] : []);
 
   // Fetch categories for filter UI
-  const allCategories = await categoryService.list({ status: 'active' });
+  const allCategories = await categoryService.listCached({ status: 'active' });
 
   // If filtering by categories, fetch products for each and merge
   let items: Awaited<ReturnType<typeof productService.list>>['items'] = [];
@@ -52,7 +52,7 @@ export default async function ShopPage({ searchParams }: Props) {
     // Fetch products filtered by each selected category, then dedupe
     const seen = new Set<string>();
     for (const catId of categoryIds) {
-      const result = await productService.list(
+      const result = await productService.listCached(
         { status: 'active', categoryId: catId, ...sort },
         { page: 1, pageSize: 100 }
       );
@@ -71,7 +71,7 @@ export default async function ShopPage({ searchParams }: Props) {
       items.sort((a, b) => sort.sortOrder === 'asc' ? a.pricePiasters - b.pricePiasters : b.pricePiasters - a.pricePiasters);
     }
   } else {
-    const result = await productService.list(
+    const result = await productService.listCached(
       { status: 'active', ...sort },
       { page: 1, pageSize: 24 }
     );

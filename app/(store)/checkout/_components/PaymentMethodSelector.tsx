@@ -202,6 +202,7 @@ export function PaymentMethodSelector({
                       src={screenShotPreview}
                       alt="Transaction screenshot preview"
                       fill
+                      sizes="160px"
                       className="object-contain p-1"
                     />
                   </div>
