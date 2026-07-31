@@ -19,6 +19,7 @@ type NavItem = {
   title: string;
   href: string;
   icon: React.ComponentType<{ className?: string; strokeWidth?: number | string }>;
+  badge?: string;
 };
 
 // Derived from the shared config so a new admin section shows up here and in
@@ -29,6 +30,7 @@ const NAV_ITEMS: NavItem[] = adminNavGroups.flatMap((group) =>
     title: item.label,
     href: item.href,
     icon: item.icon,
+    badge: item.badge,
   }))
 );
 
@@ -116,6 +118,14 @@ function AdminSidebarInner() {
                     strokeWidth={active ? 2 : 1.5}
                   />
                   <span className="flex-1 truncate">{item.title}</span>
+                  {item.badge && !active && (
+                    <span className="relative flex items-center">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#D0D48D]/50" />
+                      <span className="relative rounded-full bg-[#D0D48D] px-1.5 py-[1px] text-[9px] font-bold tracking-wider text-stone-900">
+                        {item.badge}
+                      </span>
+                    </span>
+                  )}
                   {active && <ChevronRight className="h-2.5 w-2.5 text-white/80" />}
                 </Link>
               );

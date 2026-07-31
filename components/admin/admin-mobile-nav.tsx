@@ -26,6 +26,7 @@ type NavItem = {
   title: string;
   href: string;
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  badge?: string;
 };
 
 // Shared with the desktop sidebar — see config/admin-navigation.ts.
@@ -34,6 +35,7 @@ const NAV_ITEMS: NavItem[] = adminNavGroups.flatMap((group) =>
     title: item.label,
     href: item.href,
     icon: item.icon,
+    badge: item.badge,
   }))
 );
 
@@ -127,7 +129,15 @@ export function AdminMobileNav() {
                         active ? 'text-white' : 'text-white/60'
                       }`}
                     />
-                    <span>{item.title}</span>
+                    <span className="flex-1">{item.title}</span>
+                    {item.badge && (
+                      <span className="relative flex items-center">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#D0D48D]/50" />
+                        <span className="relative rounded-full bg-[#D0D48D] px-2 py-[2px] text-[10px] font-bold tracking-wider text-stone-900">
+                          {item.badge}
+                        </span>
+                      </span>
+                    )}
                   </Link>
                 );
               })}

@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Sparkles, Heart } from 'lucide-react';
+import { WhatsNewV11 } from './whats-new-v11';
 
 const Typewriter = ({
   text,
@@ -57,6 +58,15 @@ const Typewriter = ({
 export default function WhatsNewPage() {
   return (
     <div className="space-y-5 w-full max-w-2xl mx-auto p-4 pb-12">
+      {/* ── Latest release ──────────────────────────────── */}
+      <WhatsNewV11 />
+
+      <Separator className="bg-white/10" />
+
+      <p className="text-[11px] uppercase tracking-widest text-white/30">
+        Earlier
+      </p>
+
       {/* Header Section */}
       <div className="flex flex-col gap-2 items-start">
         <div className="flex items-center gap-2">

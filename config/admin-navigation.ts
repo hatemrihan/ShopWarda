@@ -59,7 +59,7 @@ export const adminNavGroups: AdminNavGroup[] = [
       { label: 'Contacts', href: '/admin/contacts', icon: MessageSquare },
       { label: 'Subscribers', href: '/admin/subscriptions', icon: Mail },
       { label: 'Funnel', href: '/admin/funnel', icon: BarChart3 },
-      { label: "What's New", href: '/admin/whats-new', icon: Sparkles },
+      { label: "What's New", href: '/admin/whats-new', icon: Sparkles, badge: 'NEW' },
     ],
   },
   {
