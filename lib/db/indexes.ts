@@ -43,6 +43,7 @@ import { StoreSettings } from './models/store-settings.model';
 import { AnalyticsEvent } from './models/analytics-event.model';
 import { AuditLog } from './models/audit-log.model';
 import { Counter } from './models/counter.model';
+import { BouquetFlower, BouquetWrap } from './models/bouquet.model';
 
 const ALL_MODELS = [
   Category,
@@ -57,6 +58,8 @@ const ALL_MODELS = [
   AnalyticsEvent,
   AuditLog,
   Counter,
+  BouquetFlower,
+  BouquetWrap,
 ] as const;
 
 /**

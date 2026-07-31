@@ -72,6 +72,49 @@ const orderItemSchema = new Schema<IOrderItem>(
       min: 0,
       validate: { validator: Number.isInteger, message: 'Integer piasters only' },
     },
+
+    // Immutable composition snapshot for custom bouquets. Absent on catalog
+    // items. Never a reference — flower prices change, placed orders do not.
+    customBouquet: {
+      type: new Schema(
+        {
+          flowers: {
+            type: [
+              new Schema(
+                {
+                  flowerId: { type: Schema.Types.ObjectId },
+                  name: { type: String, required: true },
+                  colorKey: { type: String, default: '' },
+                  colorLabel: { type: String, default: '' },
+                  qty: { type: Number, required: true, min: 1 },
+                  perStemMinor: { type: Number, required: true, min: 0 },
+                  lineMinor: { type: Number, required: true, min: 0 },
+                },
+                { _id: false }
+              ),
+            ],
+            default: [],
+          },
+          wrap: {
+            type: new Schema(
+              {
+                wrapId: { type: Schema.Types.ObjectId },
+                name: { type: String, default: '' },
+                material: { type: String, default: '' },
+                priceMinor: { type: Number, default: 0, min: 0 },
+              },
+              { _id: false }
+            ),
+            required: false,
+          },
+          cardMessage: String,
+          cardPriceMinor: { type: Number, default: 0, min: 0 },
+          basePriceMinor: { type: Number, default: 0, min: 0 },
+        },
+        { _id: false }
+      ),
+      required: false,
+    },
   },
   { _id: false }
 );

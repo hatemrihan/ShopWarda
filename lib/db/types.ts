@@ -137,6 +137,32 @@ export interface IAssetRef {
 
 // ─── Order Embedded Types ───────────────────────────────────────
 
+/**
+ * Immutable snapshot of a composed bouquet, captured at order time.
+ * Never reference live flower/wrap documents from an order — prices and
+ * availability change, the order must not.
+ */
+export interface ICustomBouquetSnapshot {
+  flowers: {
+    flowerId?: Types.ObjectId;
+    name: string;
+    colorKey: string;
+    colorLabel: string;
+    qty: number;
+    perStemMinor: number;
+    lineMinor: number;
+  }[];
+  wrap: {
+    wrapId?: Types.ObjectId;
+    name: string;
+    material: string;
+    priceMinor: number;
+  };
+  cardMessage?: string;
+  cardPriceMinor: number;
+  basePriceMinor: number;
+}
+
 export interface IOrderItem {
   sourceProductId?: Types.ObjectId;
   sourceVariantId?: Types.ObjectId;
@@ -148,6 +174,8 @@ export interface IOrderItem {
   quantity: number;
   unitPriceMinor: number;
   lineTotalMinor: number;
+  /** Present only on custom-bouquet lines. */
+  customBouquet?: ICustomBouquetSnapshot;
 }
 
 export interface IEgyptAddress {

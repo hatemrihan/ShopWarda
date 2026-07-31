@@ -10,7 +10,7 @@
  */
 
 import crypto from 'crypto';
-import type { Types } from 'mongoose';
+import mongoose, { isValidObjectId, type Types } from 'mongoose';
 import connectDB from '@/lib/db/mongoose';
 import { Order } from '@/lib/db/models/order.model';
 import { Product } from '@/lib/db/models/product.model';
@@ -19,6 +19,8 @@ import { getNextSequence } from '@/lib/db/models/counter.model';
 import { getSettings } from '@/lib/db/models/store-settings.model';
 import { ValidationError } from '@/lib/errors';
 import logger from '@/lib/logger';
+import { priceBouquet } from '@/features/bouquet/server/bouquet.service';
+import type { BouquetConfig } from '@/features/bouquet/schemas';
 import type {
   IOrderItem,
   IEgyptAddress,
@@ -31,10 +33,27 @@ import type {
 
 // ─── Input ──────────────────────────────────────────────────────
 
-export interface OrderItemInput {
+export interface CatalogItemInput {
+  kind?: 'catalog';
   productId: string;
   variantId: string;
   quantity: number;
+}
+
+/**
+ * A composed bouquet. Carries no prices — the server re-reads every price
+ * from the database, so a tampered payload cannot set its own total.
+ */
+export interface BouquetItemInput {
+  kind: 'bouquet';
+  config: BouquetConfig;
+  quantity: number;
+}
+
+export type OrderItemInput = CatalogItemInput | BouquetItemInput;
+
+function isBouquetItem(item: OrderItemInput): item is BouquetItemInput {
+  return item.kind === 'bouquet';
 }
 
 export interface PlaceOrderInput {
@@ -156,7 +175,11 @@ export function buildIdempotencyHash(input: PlaceOrderInput): string {
     : JSON.stringify({
         phone: input.customer.phone,
         items: input.items
-          .map((i) => `${i.productId}:${i.variantId}:${i.quantity}`)
+          .map((i) =>
+            isBouquetItem(i)
+              ? `bouquet:${JSON.stringify(i.config)}:${i.quantity}`
+              : `${i.productId}:${i.variantId}:${i.quantity}`
+          )
           .sort(),
         day: new Date().toISOString().slice(0, 10),
       });
@@ -221,6 +244,51 @@ export const orderService = {
     let subtotalMinor = 0;
 
     for (const item of items) {
+      // ── Custom bouquet: priced entirely server-side ───────────
+      if (isBouquetItem(item)) {
+        const quantity = Math.max(1, item.quantity ?? 1);
+        const priced = await priceBouquet(item.config);
+
+        const lineTotalMinor = priced.totalMinor * quantity;
+        subtotalMinor += lineTotalMinor;
+
+        orderItems.push({
+          sku: 'CUSTOM-BOUQUET',
+          productName: `Custom Bouquet (${priced.stemCount} stems)`,
+          productSlug: 'custom-bouquet',
+          // Human-readable lines, so the existing admin table, CSV exports and
+          // email `attributes` path render the composition with no extra work.
+          selectedOptions: priced.summaryLines,
+          imageUrl: undefined,
+          quantity,
+          unitPriceMinor: priced.totalMinor,
+          lineTotalMinor,
+          customBouquet: {
+            flowers: priced.flowers.map((f) => ({
+              flowerId: toObjectId(f.flowerId),
+              name: f.name,
+              colorKey: f.colorKey,
+              colorLabel: f.colorLabel,
+              qty: f.qty,
+              perStemMinor: f.perStemMinor,
+              lineMinor: f.lineMinor,
+            })),
+            wrap: {
+              wrapId: toObjectId(priced.wrap.wrapId),
+              name: priced.wrap.name,
+              material: priced.wrap.material,
+              priceMinor: priced.wrap.priceMinor,
+            },
+            cardMessage: priced.cardMessage,
+            cardPriceMinor: priced.cardPriceMinor,
+            basePriceMinor: priced.basePriceMinor,
+          },
+        });
+
+        // Bouquets are made to order — no variant stock to decrement.
+        continue;
+      }
+
       const product = await Product.findById(item.productId);
       if (!product || product.status !== 'active') {
         throw new ValidationError(`Product not found: ${item.productId}`, {});
@@ -466,6 +534,11 @@ export const orderService = {
 };
 
 // ─── Helpers ────────────────────────────────────────────────────
+
+/** Snapshot ids are stored as ObjectIds; tolerate anything unparseable. */
+function toObjectId(id: string): Types.ObjectId | undefined {
+  return isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : undefined;
+}
 
 /**
  * Guarded stock decrement: only decrements when the variant still holds enough

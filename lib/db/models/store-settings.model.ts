@@ -25,8 +25,23 @@ export interface IStoreSettings extends Document {
     facebookPixel?: string;
   };
   sizeGuide: ISizeGuide;
+  bouquetBuilder: IBouquetBuilderSettings;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface IBouquetBuilderSettings {
+  /** Feature flag — the builder ships dark and is flipped on when seeded. */
+  enabled: boolean;
+  minStems: number;
+  maxStems: number;
+  /** Arrangement fee added to every bouquet. */
+  basePriceMinor: number;
+  card: {
+    enabled: boolean;
+    priceMinor: number;
+    maxLength: number;
+  };
 }
 
 // ─── Embedded Schemas ───────────────────────────────────────────
@@ -118,6 +133,37 @@ const sizeGuideSchema = new Schema(
 
 // ─── Schema ─────────────────────────────────────────────────────
 
+const bouquetBuilderSchema = new Schema<IBouquetBuilderSettings>(
+  {
+    enabled: { type: Boolean, default: false },
+    minStems: { type: Number, default: 5, min: 1 },
+    maxStems: { type: Number, default: 100, min: 1 },
+    basePriceMinor: {
+      type: Number,
+      default: 0,
+      min: 0,
+      validate: { validator: Number.isInteger, message: 'Integer piasters' },
+    },
+    card: {
+      type: new Schema(
+        {
+          enabled: { type: Boolean, default: true },
+          priceMinor: {
+            type: Number,
+            default: 0,
+            min: 0,
+            validate: { validator: Number.isInteger, message: 'Integer piasters' },
+          },
+          maxLength: { type: Number, default: 200, min: 1 },
+        },
+        { _id: false }
+      ),
+      default: () => ({}),
+    },
+  },
+  { _id: false }
+);
+
 const storeSettingsSchema = new Schema<IStoreSettings>(
   {
     key: {
@@ -172,6 +218,11 @@ const storeSettingsSchema = new Schema<IStoreSettings>(
 
     sizeGuide: {
       type: sizeGuideSchema,
+      default: () => ({}),
+    },
+
+    bouquetBuilder: {
+      type: bouquetBuilderSchema,
       default: () => ({}),
     },
   },

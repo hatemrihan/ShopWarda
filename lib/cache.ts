@@ -14,6 +14,7 @@ export const CACHE_TAGS = {
   CATEGORIES: 'categories',
   PRODUCTS: 'products',
   SETTINGS: 'store-settings',
+  BOUQUET: 'bouquet',
 
   category: (slug: string) => `category:${slug}`,
   product: (slug: string) => `product:${slug}`,
@@ -43,6 +44,10 @@ export function invalidateProduct(slug: string) {
 
 export function invalidateSettings() {
   revalidateTag(CACHE_TAGS.SETTINGS, PROFILE);
+}
+
+export function invalidateBouquet() {
+  revalidateTag(CACHE_TAGS.BOUQUET, PROFILE);
 }
 
 export function invalidateAll() {
