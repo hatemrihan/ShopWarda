@@ -187,8 +187,10 @@ export const productService = {
         label: o.name,
         sortOrder: i,
         values: o.values.map((v, vi) => ({
-          key: v.toLowerCase().replace(/\s+/g, '-'),
-          label: v,
+          key: v.label.toLowerCase().replace(/\s+/g, '-'),
+          label: v.label,
+          // Drives the real colour swatches on the PDP.
+          swatchHex: v.swatchHex,
           sortOrder: vi,
         })),
       })) ?? [],
@@ -295,8 +297,9 @@ export const productService = {
         label: o.name,
         sortOrder: i,
         values: o.values.map((v, vi) => ({
-          key: v.toLowerCase().replace(/\s+/g, '-'),
-          label: v,
+          key: v.label.toLowerCase().replace(/\s+/g, '-'),
+          label: v.label,
+          swatchHex: v.swatchHex,
           sortOrder: vi,
         })),
       }));

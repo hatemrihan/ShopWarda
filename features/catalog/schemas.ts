@@ -72,6 +72,36 @@ export const variantSchema = variantBaseSchema.refine(
   { message: 'Compare-at price must exceed current price', path: ['compareAtPricePiasters'] }
 );
 
+// ─── Option Schemas ─────────────────────────────────────────────
+
+/**
+ * An option value is either a plain label ("Red") or a label with a swatch.
+ * Both forms are accepted and normalised to the object form, so older callers
+ * that send bare strings keep working.
+ */
+const optionValueInputSchema = z
+  .union([
+    z.string().min(1).max(100),
+    z.object({
+      label: z.string().min(1).max(100),
+      swatchHex: z
+        .string()
+        .regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, 'Must be a hex colour like #C81E3A')
+        .optional()
+        .or(z.literal('')),
+    }),
+  ])
+  .transform((v) =>
+    typeof v === 'string'
+      ? { label: v, swatchHex: undefined as string | undefined }
+      : { label: v.label, swatchHex: v.swatchHex || undefined }
+  );
+
+const optionInputSchema = z.object({
+  name: z.string().min(1).max(50),
+  values: z.array(optionValueInputSchema).min(1),
+});
+
 // ─── Product Schemas ────────────────────────────────────────────
 
 export const createProductSchema = z.object({
@@ -81,10 +111,7 @@ export const createProductSchema = z.object({
   shortDescription: z.string().max(500).optional(),
   type: z.enum(['simple', 'bundle']).default('simple'),
   categoryIds: z.array(z.string()).min(1, 'At least one category required'),
-  options: z.array(z.object({
-    name: z.string().min(1).max(50),
-    values: z.array(z.string().min(1).max(100)).min(1),
-  })).optional(),
+  options: z.array(optionInputSchema).optional(),
   variants: z.array(variantSchema).min(1, 'At least one variant required'),
   media: z.array(mediaItemSchema).optional(),
   seo: seoMetaSchema.optional(),
@@ -120,10 +147,7 @@ export const updateProductSchema = z.object({
   description: z.string().max(5000).optional(),
   shortDescription: z.string().max(500).optional(),
   categoryIds: z.array(z.string()).min(1).optional(),
-  options: z.array(z.object({
-    name: z.string().min(1).max(50),
-    values: z.array(z.string().min(1).max(100)).min(1),
-  })).optional(),
+  options: z.array(optionInputSchema).optional(),
   variants: z.array(variantSchema).min(1).optional(),
   media: z.array(mediaItemSchema).optional(),
   seo: seoMetaSchema.optional(),

@@ -14,10 +14,28 @@ import type { ProductDTO } from '@/features/catalog/types';
 
 // ── Types ─────────────────────────────────────────────────────
 
+interface OptionValueDef {
+  label: string;
+  /**
+   * Only meaningful for colour-like options; drives the PDP swatch.
+   * Present-but-undefined rather than optional, to match the shape the
+   * server action expects after schema normalisation.
+   */
+  swatchHex: string | undefined;
+}
+
 interface OptionDef {
   name: string;
-  values: string[];
+  values: OptionValueDef[];
 }
+
+/** Colour options get swatch pickers; Size, Material etc. do not. */
+function isColorOption(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  return n === 'color' || n === 'colour';
+}
+
+const DEFAULT_SWATCH = '#292827';
 
 interface VariantRow {
   sku: string;
@@ -47,19 +65,74 @@ function slugify(name: string): string {
     .replace(/^-|-$/g, '');
 }
 
-function generateVariantMatrix(options: OptionDef[]): VariantRow[] {
+/** Stable identity for a variant: its option-value pairs, order-independent. */
+function variantSignature(optionValues: { name: string; value: string }[]): string {
+  return optionValues
+    .map((ov) => `${ov.name}=${ov.value}`)
+    .sort()
+    .join('|');
+}
+
+/**
+ * Rebuild the variant matrix after an option edit.
+ *
+ * `existing` is carried over by signature so combinations that survive the
+ * edit keep their price, stock and flags. Regenerating blindly used to reset
+ * every variant to zero, silently wiping the pricing of a live product the
+ * moment anyone touched its options.
+ */
+function generateVariantMatrix(options: OptionDef[], existing: VariantRow[] = []): VariantRow[] {
+  const previous = new Map(existing.map((v) => [variantSignature(v.optionValues), v]));
+
   if (options.length === 0) {
-    return [{ sku: 'DEFAULT', optionValues: [], pricePiasters: 0, stock: 0, lowStockThreshold: 5, isDefault: true, isActive: true }];
+    const carried = previous.get('') ?? existing[0];
+    return [{
+      sku: carried?.sku || 'DEFAULT',
+      optionValues: [],
+      pricePiasters: carried?.pricePiasters ?? 0,
+      compareAtPricePiasters: carried?.compareAtPricePiasters,
+      stock: carried?.stock ?? 0,
+      lowStockThreshold: carried?.lowStockThreshold ?? 5,
+      weight: carried?.weight,
+      isDefault: true,
+      isActive: carried?.isActive ?? true,
+    }];
   }
+
   function cartesian(arrays: string[][]): string[][] {
     return arrays.reduce<string[][]>((acc, arr) => acc.flatMap((combo) => arr.map((val) => [...combo, val])), [[]]);
   }
-  const combos = cartesian(options.map((o) => o.values));
-  return combos.map((combo, i) => ({
-    sku: combo.join('-').toUpperCase(),
-    optionValues: combo.map((val, j) => ({ name: options[j].name, value: val })),
-    pricePiasters: 0, stock: 0, lowStockThreshold: 5, isDefault: i === 0, isActive: true,
-  }));
+
+  const combos = cartesian(options.map((o) => o.values.map((v) => v.label)));
+
+  const rows = combos.map((combo) => {
+    const optionValues = combo.map((val, j) => ({ name: options[j].name, value: val }));
+    const carried = previous.get(variantSignature(optionValues));
+
+    return {
+      sku: carried?.sku || combo.join('-').toUpperCase(),
+      optionValues,
+      pricePiasters: carried?.pricePiasters ?? 0,
+      compareAtPricePiasters: carried?.compareAtPricePiasters,
+      stock: carried?.stock ?? 0,
+      lowStockThreshold: carried?.lowStockThreshold ?? 5,
+      weight: carried?.weight,
+      isDefault: carried?.isDefault ?? false,
+      isActive: carried?.isActive ?? true,
+    };
+  });
+
+  // Exactly one default is required; keep the carried one, else the first row.
+  if (!rows.some((r) => r.isDefault)) rows[0].isDefault = true;
+  else {
+    let seen = false;
+    for (const r of rows) {
+      if (r.isDefault && seen) r.isDefault = false;
+      if (r.isDefault) seen = true;
+    }
+  }
+
+  return rows;
 }
 
 // ── Steps ─────────────────────────────────────────────────────
@@ -144,7 +217,7 @@ export function ProductForm({ product, categories }: ProductFormProps) {
   const [options, setOptions] = useState<OptionDef[]>(
     product?.options?.map((o) => ({
       name: o.label,
-      values: o.values.map((v) => v.label),
+      values: o.values.map((v) => ({ label: v.label, swatchHex: v.swatchHex })),
     })) ?? []
   );
   const [variants, setVariants] = useState<VariantRow[]>(
@@ -181,12 +254,21 @@ export function ProductForm({ product, categories }: ProductFormProps) {
   }
 
   function addOption() {
-    if (!newOptionName.trim()) return;
-    const values = newOptionValues.split(',').map((v) => v.trim()).filter(Boolean);
-    if (values.length === 0) return;
-    const updated = [...options, { name: newOptionName.trim(), values }];
+    const optionName = newOptionName.trim();
+    if (!optionName) return;
+
+    const labels = newOptionValues.split(',').map((v) => v.trim()).filter(Boolean);
+    if (labels.length === 0) return;
+
+    const values: OptionValueDef[] = labels.map((label) => ({
+      label,
+      swatchHex: isColorOption(optionName) ? DEFAULT_SWATCH : undefined,
+    }));
+
+    const updated = [...options, { name: optionName, values }];
     setOptions(updated);
-    setVariants(generateVariantMatrix(updated));
+    // Pass the current variants so surviving combinations keep their prices.
+    setVariants(generateVariantMatrix(updated, variants));
     setNewOptionName('');
     setNewOptionValues('');
   }
@@ -194,7 +276,22 @@ export function ProductForm({ product, categories }: ProductFormProps) {
   function removeOption(index: number) {
     const updated = options.filter((_, i) => i !== index);
     setOptions(updated);
-    setVariants(generateVariantMatrix(updated));
+    setVariants(generateVariantMatrix(updated, variants));
+  }
+
+  /** Set the swatch for one value of one option. */
+  function updateSwatch(optionIndex: number, valueIndex: number, swatchHex: string) {
+    setOptions((prev) =>
+      prev.map((opt, i) =>
+        i !== optionIndex
+          ? opt
+          : {
+              ...opt,
+              values: opt.values.map((v, j) => (j === valueIndex ? { ...v, swatchHex } : v)),
+            }
+      )
+    );
+    // Swatches are presentation only — the variant matrix is untouched.
   }
 
   function updateVariant(index: number, field: keyof VariantRow, value: VariantRow[keyof VariantRow]) {
@@ -348,12 +445,41 @@ export function ProductForm({ product, categories }: ProductFormProps) {
             <Section title="04. Options & Variants">
               {/* Existing options */}
               {options.map((opt, i) => (
-                <div key={i} className="flex items-center gap-2 p-2 bg-white/[0.02] rounded-md border border-white/[0.04]">
-                  <Badge className="bg-white/[0.06] text-white/60 text-[11px]">{opt.name}</Badge>
-                  <span className="text-[12px] text-white/30">{opt.values.join(', ')}</span>
-                  <button type="button" onClick={() => removeOption(i)} className="ml-auto text-red-400/40 hover:text-red-400 transition-colors">
-                    <Trash2 className="h-3 w-3" />
-                  </button>
+                <div key={i} className="p-3 bg-white/[0.02] rounded-md border border-white/[0.04] space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-white/[0.06] text-white/60 text-[11px]">{opt.name}</Badge>
+                    {!isColorOption(opt.name) && (
+                      <span className="text-[12px] text-white/30">
+                        {opt.values.map((v) => v.label).join(', ')}
+                      </span>
+                    )}
+                    <button type="button" onClick={() => removeOption(i)} className="ml-auto text-red-400/40 hover:text-red-400 transition-colors">
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+
+                  {/* Colour options get a real swatch per value — this is what
+                      the product page renders. */}
+                  {isColorOption(opt.name) && (
+                    <div className="flex flex-wrap gap-2">
+                      {opt.values.map((val, j) => (
+                        <div
+                          key={j}
+                          className="flex items-center gap-2 pl-2 pr-1 py-1 bg-white/[0.03] border border-white/[0.06] rounded-md"
+                        >
+                          <span className="text-[12px] text-white/60">{val.label}</span>
+                          <input
+                            type="color"
+                            value={val.swatchHex || DEFAULT_SWATCH}
+                            onChange={(e) => updateSwatch(i, j, e.target.value)}
+                            title={`Swatch for ${val.label}`}
+                            aria-label={`Swatch colour for ${val.label}`}
+                            className="h-6 w-8 bg-transparent border border-white/[0.08] rounded cursor-pointer"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
 
@@ -371,7 +497,7 @@ export function ProductForm({ product, categories }: ProductFormProps) {
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-[12px] text-white/40">Variants ({variants.length})</span>
                   {options.length > 0 && (
-                    <button type="button" onClick={() => setVariants(generateVariantMatrix(options))} className="text-[11px] text-white/30 hover:text-white/60 transition-colors">
+                    <button type="button" onClick={() => setVariants(generateVariantMatrix(options, variants))} className="text-[11px] text-white/30 hover:text-white/60 transition-colors">
                       Regenerate
                     </button>
                   )}
