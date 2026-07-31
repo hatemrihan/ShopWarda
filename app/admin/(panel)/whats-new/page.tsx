@@ -58,15 +58,6 @@ const Typewriter = ({
 export default function WhatsNewPage() {
   return (
     <div className="space-y-5 w-full max-w-2xl mx-auto p-4 pb-12">
-      {/* ── Latest release ──────────────────────────────── */}
-      <WhatsNewV11 />
-
-      <Separator className="bg-white/10" />
-
-      <p className="text-[11px] uppercase tracking-widest text-white/30">
-        Earlier
-      </p>
-
       {/* Header Section */}
       <div className="flex flex-col gap-2 items-start">
         <div className="flex items-center gap-2">
@@ -116,6 +107,11 @@ export default function WhatsNewPage() {
           </p>
         </CardContent>
       </Card>
+
+      {/* ── Newer releases, below the original note ─────────── */}
+      <Separator className="bg-white/10" />
+
+      <WhatsNewV11 />
     </div>
   );
 }

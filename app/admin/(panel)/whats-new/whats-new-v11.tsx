@@ -38,7 +38,8 @@ function AnimatedBouquet() {
           strokeLinecap="round"
           fill="none"
           initial={reduce ? { pathLength: 1 } : { pathLength: 0 }}
-          animate={{ pathLength: 1 }}
+          whileInView={{ pathLength: 1 }}
+          viewport={{ once: true, amount: 0.4 }}
           transition={{ duration: 0.7, delay: 0.2 + i * 0.16, ease: 'easeOut' }}
         />
       ))}
@@ -52,7 +53,8 @@ function AnimatedBouquet() {
             r={stem.r}
             fill={stem.hex}
             initial={reduce ? { scale: 1, opacity: 1 } : { scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
+            whileInView={{ scale: 1, opacity: 1 }}
+            viewport={{ once: true, amount: 0.4 }}
             transition={{
               duration: 0.5,
               delay: 0.75 + i * 0.16,
@@ -68,7 +70,8 @@ function AnimatedBouquet() {
             r={stem.r * 0.38}
             fill="#FFFDF7"
             initial={reduce ? { opacity: 1 } : { opacity: 0 }}
-            animate={{ opacity: 0.85 }}
+            whileInView={{ opacity: 0.85 }}
+            viewport={{ once: true, amount: 0.4 }}
             transition={{ duration: 0.4, delay: 0.95 + i * 0.16 }}
           />
         </motion.g>
@@ -79,7 +82,8 @@ function AnimatedBouquet() {
         d="M68 172 L100 196 L132 172 L118 150 L82 150 Z"
         fill="#D0D48D"
         initial={reduce ? { scale: 1, opacity: 1 } : { scale: 0.5, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
+        whileInView={{ scale: 1, opacity: 1 }}
+        viewport={{ once: true, amount: 0.4 }}
         transition={{ duration: 0.55, delay: 1.7, type: 'spring', stiffness: 180, damping: 16 }}
         style={{ transformOrigin: '100px 175px' }}
       />
@@ -89,7 +93,8 @@ function AnimatedBouquet() {
         strokeWidth={1.5}
         fill="none"
         initial={reduce ? { opacity: 1 } : { opacity: 0 }}
-        animate={{ opacity: 1 }}
+        whileInView={{ opacity: 1 }}
+        viewport={{ once: true, amount: 0.4 }}
         transition={{ duration: 0.4, delay: 2 }}
       />
     </svg>
@@ -132,7 +137,8 @@ export function WhatsNewV11() {
 
   const rise = (delay: number) => ({
     initial: reduce ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 },
-    animate: { opacity: 1, y: 0 },
+    whileInView: { opacity: 1, y: 0 },
+    viewport: { once: true, amount: 0.3 },
     transition: { duration: 0.5, delay, ease: 'easeOut' as const },
   });
 
