@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/db/mongoose';
 import { Promotion } from '@/lib/db/models/promotion.model';
+import { guardAdmin } from '@/lib/auth/api-guard';
 
 // GET /api/admin/promo — list all promos
 export async function GET() {
+  const denied = await guardAdmin();
+  if (denied) return denied;
+
   await connectDB();
   const promos = await Promotion.find({}).sort({ createdAt: -1 }).lean();
   const items = promos.map((p) => ({
@@ -28,6 +32,9 @@ export async function GET() {
 
 // POST /api/admin/promo — create new promo
 export async function POST(request: Request) {
+  const denied = await guardAdmin();
+  if (denied) return denied;
+
   await connectDB();
   try {
     const body = await request.json();

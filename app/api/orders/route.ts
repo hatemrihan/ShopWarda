@@ -8,6 +8,9 @@ import { Promotion } from '@/lib/db/models/promotion.model';
 import { getNextSequence } from '@/lib/db/models/counter.model';
 import { getSettings } from '@/lib/db/models/store-settings.model';
 import { sendOrderConfirmationEmail, sendAdminOrderNotification } from '@/lib/email/email';
+import { guardAdmin, getClientIp } from '@/lib/auth/api-guard';
+import { checkRateLimit, checkoutLimiter } from '@/lib/security/rate-limit';
+import { RateLimitError } from '@/lib/errors';
 import type {
   IOrderItem,
   IEgyptAddress,
@@ -43,6 +46,9 @@ interface OrderItemInput {
  */
 export async function POST(req: NextRequest) {
   try {
+    // Public route (guest checkout) — rate limited per IP. No-ops without Upstash.
+    await checkRateLimit(checkoutLimiter, `orders:${getClientIp(req)}`);
+
     await connectDB();
     const body = await req.json();
 
@@ -408,6 +414,13 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error: unknown) {
+    if (error instanceof RateLimitError) {
+      return NextResponse.json(
+        { success: false, error: 'Too many checkout attempts. Please wait a moment and try again.' },
+        { status: 429 },
+      );
+    }
+
     console.error('[POST /api/orders]', error);
 
     // Handle duplicate key (idempotency)
@@ -498,6 +511,9 @@ function buildProofUrl(assetKey: string): string {
  * Returns all orders formatted for admin panel with all fields.
  */
 export async function GET() {
+  const denied = await guardAdmin();
+  if (denied) return denied;
+
   try {
     await connectDB();
     const orders = (await Order.find().sort({ createdAt: -1 }).lean()) as unknown as OrderRaw[];
@@ -556,6 +572,9 @@ export async function GET() {
  * Update order status.
  */
 export async function PATCH(req: NextRequest) {
+  const denied = await guardAdmin();
+  if (denied) return denied;
+
   try {
     await connectDB();
     const { id, status } = await req.json();
@@ -575,6 +594,9 @@ export async function PATCH(req: NextRequest) {
  * Permanently delete order.
  */
 export async function DELETE(req: NextRequest) {
+  const denied = await guardAdmin();
+  if (denied) return denied;
+
   try {
     await connectDB();
     const { id } = await req.json();

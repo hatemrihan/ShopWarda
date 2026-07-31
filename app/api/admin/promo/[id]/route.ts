@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import connectDB from '@/lib/db/mongoose';
 import { Promotion } from '@/lib/db/models/promotion.model';
 import { isValidObjectId } from 'mongoose';
+import { guardAdmin } from '@/lib/auth/api-guard';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -9,6 +10,9 @@ interface RouteContext {
 
 // GET /api/admin/promo/[id]
 export async function GET(_req: Request, ctx: RouteContext) {
+  const denied = await guardAdmin();
+  if (denied) return denied;
+
   const { id } = await ctx.params;
   if (!isValidObjectId(id)) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
 
@@ -37,6 +41,9 @@ export async function GET(_req: Request, ctx: RouteContext) {
 
 // PUT /api/admin/promo/[id]
 export async function PUT(req: Request, ctx: RouteContext) {
+  const denied = await guardAdmin();
+  if (denied) return denied;
+
   const { id } = await ctx.params;
   if (!isValidObjectId(id)) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
 
@@ -72,6 +79,9 @@ export async function PUT(req: Request, ctx: RouteContext) {
 
 // DELETE /api/admin/promo/[id]
 export async function DELETE(_req: Request, ctx: RouteContext) {
+  const denied = await guardAdmin();
+  if (denied) return denied;
+
   const { id } = await ctx.params;
   if (!isValidObjectId(id)) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
 

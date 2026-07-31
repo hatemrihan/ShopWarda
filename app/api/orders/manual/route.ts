@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import connectDB from '@/lib/db/mongoose';
 import { Order } from '@/lib/db/models/order.model';
 import { getNextSequence } from '@/lib/db/models/counter.model';
+import { guardAdmin } from '@/lib/auth/api-guard';
 
 interface ManualItemInput {
   name: string;
@@ -12,6 +13,9 @@ interface ManualItemInput {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = await guardAdmin();
+  if (denied) return denied;
+
   try {
     await connectDB();
     const body = await req.json();
