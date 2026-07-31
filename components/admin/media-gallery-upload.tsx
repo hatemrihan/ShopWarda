@@ -119,7 +119,7 @@ export function MediaGalleryUpload({
             )}
 
             {/* Actions overlay */}
-            <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <div className="absolute right-1 top-1 flex gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
               {index > 0 && (
                 <button
                   type="button"

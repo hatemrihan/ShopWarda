@@ -86,19 +86,40 @@ export function ProductsClient({ initialProducts }: { initialProducts: ProductLi
                     </div>
                   )}
 
-                  {/* Hover actions */}
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-150 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                  {/* Actions. Hover-reveal on desktop; always visible on touch
+                      screens, which have no hover state and so could never
+                      reach these buttons. */}
+                  <div className="hidden sm:flex absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-150 items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
                     <Link
                       href={`/admin/products/${product.id}/edit`}
+                      aria-label={`Edit ${product.name}`}
                       className="h-8 w-8 rounded-lg bg-white/10 backdrop-blur-sm text-white hover:bg-white/20 flex items-center justify-center transition-colors"
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </Link>
                     <Link
                       href={`/admin/products/${product.id}/delete`}
+                      aria-label={`Delete ${product.name}`}
                       className="h-8 w-8 rounded-lg bg-red-500/10 backdrop-blur-sm text-red-400 hover:bg-red-500/20 flex items-center justify-center transition-colors"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
+                    </Link>
+                  </div>
+
+                  <div className="flex sm:hidden absolute bottom-2 right-2 gap-2">
+                    <Link
+                      href={`/admin/products/${product.id}/edit`}
+                      aria-label={`Edit ${product.name}`}
+                      className="h-9 w-9 rounded-lg bg-black/60 backdrop-blur-sm text-white flex items-center justify-center"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Link>
+                    <Link
+                      href={`/admin/products/${product.id}/delete`}
+                      aria-label={`Delete ${product.name}`}
+                      className="h-9 w-9 rounded-lg bg-black/60 backdrop-blur-sm text-red-400 flex items-center justify-center"
+                    >
+                      <Trash2 className="h-4 w-4" />
                     </Link>
                   </div>
 

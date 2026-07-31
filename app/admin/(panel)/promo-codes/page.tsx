@@ -149,7 +149,7 @@ export default function AdminPromoCodesPage() {
                   </div>
 
                   {/* Hover actions */}
-                  <div className="absolute top-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-3 right-3 flex gap-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                     <Link
                       href={`/admin/promo-codes/${promo.id}/edit`}
                       className="h-7 w-7 rounded-md bg-white/10 backdrop-blur-sm text-white hover:bg-white/20 flex items-center justify-center transition-colors"

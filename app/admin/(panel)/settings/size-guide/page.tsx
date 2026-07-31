@@ -248,7 +248,7 @@ export default function SizeGuidePage() {
                 />
                 <button
                   onClick={() => removeColumn(i)}
-                  className="p-1 rounded hover:bg-red-500/20 text-white/20 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                  className="p-1 rounded hover:bg-red-500/20 text-white/20 hover:text-red-400 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                 >
                   <Trash2 className="h-3 w-3" />
                 </button>
@@ -328,7 +328,7 @@ export default function SizeGuidePage() {
                     <td className="py-1.5 px-2">
                       <button
                         onClick={() => removeRow(ri)}
-                        className="p-1 rounded hover:bg-red-500/20 text-white/20 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                        className="p-1 rounded hover:bg-red-500/20 text-white/20 hover:text-red-400 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>

@@ -308,12 +308,15 @@ export default function CategoriesPage() {
                                     </div>
                                 )}
 
-                                {/* Hover overlay with actions */}
-                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-150 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                                {/* Actions. Hover-reveal on desktop; always
+                                    visible on touch screens, which have no
+                                    hover state. */}
+                                <div className="hidden sm:flex absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-150 items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
                                     <Button
                                         size="icon"
                                         variant="ghost"
                                         onClick={() => openEdit(cat)}
+                                        aria-label={`Edit ${cat.name}`}
                                         className="h-8 w-8 rounded-lg bg-white/10 backdrop-blur-sm text-white hover:bg-white/20 hover:text-white"
                                     >
                                         <Pencil className="h-3.5 w-3.5" />
@@ -322,9 +325,31 @@ export default function CategoriesPage() {
                                         size="icon"
                                         variant="ghost"
                                         onClick={() => setDeleteCat(cat)}
+                                        aria-label={`Delete ${cat.name}`}
                                         className="h-8 w-8 rounded-lg bg-red-500/10 backdrop-blur-sm text-red-400 hover:bg-red-500/20 hover:text-red-300"
                                     >
                                         <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                </div>
+
+                                <div className="flex sm:hidden absolute bottom-2 right-2 gap-2">
+                                    <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        onClick={() => openEdit(cat)}
+                                        aria-label={`Edit ${cat.name}`}
+                                        className="h-9 w-9 rounded-lg bg-black/60 backdrop-blur-sm text-white hover:text-white"
+                                    >
+                                        <Pencil className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        onClick={() => setDeleteCat(cat)}
+                                        aria-label={`Delete ${cat.name}`}
+                                        className="h-9 w-9 rounded-lg bg-black/60 backdrop-blur-sm text-red-400 hover:text-red-300"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
                                     </Button>
                                 </div>
                             </div>
