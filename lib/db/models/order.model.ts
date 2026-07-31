@@ -275,6 +275,14 @@ orderSchema.index(
   { name: 'phone_search' }
 );
 
+// The dashboard counts orders by date range with no status filter, which the
+// status-prefixed index above cannot serve — that was a collection scan on
+// every dashboard load.
+orderSchema.index(
+  { createdAt: -1 },
+  { name: 'orders_by_date' }
+);
+
 // ─── Export ─────────────────────────────────────────────────────
 
 export const Order: Model<IOrder> =
