@@ -44,11 +44,12 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
   const [showSizeGuide, setShowSizeGuide] = useState<boolean>(false);
 
   // Dynamic Option choices from Admin
+  // Keyed by option key -> value key (NOT labels — variants are keyed).
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>(() => {
     const defaults: Record<string, string> = {};
     product.options?.forEach((opt) => {
       if (opt.values.length > 0) {
-        defaults[opt.name] = opt.values[0];
+        defaults[opt.key] = opt.values[0].key;
       }
     });
     return defaults;
@@ -113,9 +114,18 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
       const currentPriceEGP = (selectedVariant?.pricePiasters ?? product.pricePiasters ?? 0) / 100;
       const primaryImage = mediaList[0]?.url || '/images/hero-1.jpg';
 
-      const sizeValue = sizeOption ? selectedOptions[sizeOption.name] : undefined;
-      const colorValue = colorOption ? selectedOptions[colorOption.name] : undefined;
-      const variantName = sizeValue || selectedVariant?.optionValues.map((ov) => ov.value).join(' / ') || 'Default';
+      // Cart shows human-readable labels, never the slugified keys.
+      const sizeValue = labelFor(sizeOption);
+      const colorValue = labelFor(colorOption);
+      const variantName =
+        sizeValue ||
+        selectedVariant?.optionValues
+          .map((ov) => {
+            const optDef = product.options?.find((o) => o.key === ov.name);
+            return optDef?.values.find((v) => v.key === ov.value)?.label ?? ov.value;
+          })
+          .join(' / ') ||
+        'Default';
 
       addItem(
         {
@@ -143,11 +153,18 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
 
   // Find options dynamically configured in Admin
   const colorOption = product.options?.find(
-    (opt) => opt.name.toLowerCase() === 'color' || opt.name.toLowerCase() === 'colour'
+    (opt) => opt.key.toLowerCase() === 'color' || opt.key.toLowerCase() === 'colour'
   );
   const sizeOption = product.options?.find(
-    (opt) => opt.name.toLowerCase() === 'size'
-  ) || product.options?.find((opt) => opt.name.toLowerCase() !== 'color');
+    (opt) => opt.key.toLowerCase() === 'size'
+  ) || product.options?.find((opt) => opt.key.toLowerCase() !== 'color');
+
+  /** Display label for the currently selected value of an option. */
+  const labelFor = (opt: { key: string; values: { key: string; label: string }[] } | undefined) => {
+    if (!opt) return undefined;
+    const selectedKey = selectedOptions[opt.key];
+    return opt.values.find((v) => v.key === selectedKey)?.label;
+  };
 
   const categoryName = product.categoryNames?.[0] || 'Ready to Wear';
 
@@ -294,28 +311,29 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
             {colorOption && (
               <div className="space-y-4 pt-6 border-t border-gray-200">
                 <p className="text-sm text-black">
-                  Color : <span className="font-normal">{selectedOptions[colorOption.name] || colorOption.values[0]}</span>
+                  Color : <span className="font-normal">{labelFor(colorOption) ?? colorOption.values[0]?.label}</span>
                 </p>
                 <div className="flex gap-2">
                   {colorOption.values.map((val) => (
                     <button
-                      key={val}
+                      key={val.key}
                       type="button"
                       onClick={() =>
                         setSelectedOptions((prev) => ({
                           ...prev,
-                          [colorOption.name]: val,
+                          [colorOption.key]: val.key,
                         }))
                       }
-                      className={`w-4 h-4 border transition-all duration-200 hover:border-black ${selectedOptions[colorOption.name] === val
+                      className={`w-4 h-4 border transition-all duration-200 hover:border-black ${selectedOptions[colorOption.key] === val.key
                           ? 'border-black border-2'
                           : 'border-gray-300'
                         }`}
                       style={{
-                        backgroundColor: '#292827',
+                        // Real swatch from admin; fall back to the house colour.
+                        backgroundColor: val.swatchHex || '#292827',
                       }}
-                      title={val}
-                      aria-label={val}
+                      title={val.label}
+                      aria-label={val.label}
                     />
                   ))}
                 </div>
@@ -326,20 +344,18 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
             <div className="space-y-4 pt-2">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-black">
-                  {sizeOption && selectedOptions[sizeOption.name]
-                    ? selectedOptions[sizeOption.name]
-                    : 'Please select size'}
+                  {labelFor(sizeOption) ?? 'Please select size'}
                 </p>
               </div>
 
               {sizeOption ? (
                 <Select
-                  value={selectedOptions[sizeOption.name] || ''}
+                  value={selectedOptions[sizeOption.key] || ''}
                   onValueChange={(val: string | null) => {
                     if (val) {
                       setSelectedOptions((prev) => ({
                         ...prev,
-                        [sizeOption.name]: val,
+                        [sizeOption.key]: val,
                       }));
                     }
                   }}
@@ -350,11 +366,11 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
                   <SelectContent className="bg-white border border-black rounded-none">
                     {sizeOption.values.map((size) => (
                       <SelectItem
-                        key={size}
-                        value={size}
+                        key={size.key}
+                        value={size.key}
                         className="hover:bg-neutral-200/50 cursor-pointer text-sm"
                       >
-                        {size}
+                        {size.label}
                       </SelectItem>
                     ))}
                   </SelectContent>

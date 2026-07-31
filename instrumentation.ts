@@ -10,6 +10,14 @@ export async function register() {
     try {
       const { default: connectDB } = await import('@/lib/db/mongoose');
       await connectDB();
+
+      // Sync schema-declared indexes (unique orderNumber / idempotencyKeyHash /
+      // SKU) now that we have a connection. Fire-and-forget: index builds must
+      // never block or fail startup.
+      const { ensureAllIndexes } = await import('@/lib/db/indexes');
+      ensureAllIndexes().catch((error) => {
+        console.error('[instrumentation] index sync failed', error);
+      });
     } catch (error) {
       console.error(
         '[instrumentation] MongoDB warm-up failed — continuing without a pooled connection.',

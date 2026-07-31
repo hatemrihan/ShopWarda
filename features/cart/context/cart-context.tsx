@@ -17,6 +17,21 @@ export interface CartItem {
   quantity: number;
   stock?: number;
   variant?: CartItemVariant;
+  /** Distinguishes catalog products from composed items (e.g. custom bouquets). */
+  kind?: 'catalog' | 'bouquet';
+  /**
+   * Stable hash of a composed item's configuration. Part of cart identity, so
+   * two differently-configured bouquets occupy two lines rather than merging.
+   */
+  configHash?: string;
+}
+
+/** The fields that decide whether two cart lines are the same line. */
+export interface CartItemIdentity {
+  id: string;
+  variantId?: string;
+  configHash?: string;
+  variant?: CartItemVariant;
 }
 
 export interface CartState {
@@ -27,8 +42,8 @@ export interface CartState {
 
 type CartAction =
   | { type: 'ADD_ITEM'; payload: CartItem }
-  | { type: 'REMOVE_ITEM'; payload: { id: string; variant?: CartItemVariant } }
-  | { type: 'UPDATE_QUANTITY'; payload: { id: string; variant?: CartItemVariant; quantity: number; maxStock?: number } }
+  | { type: 'REMOVE_ITEM'; payload: CartItemIdentity }
+  | { type: 'UPDATE_QUANTITY'; payload: CartItemIdentity & { quantity: number; maxStock?: number } }
   | { type: 'CLEAR_CART' }
   | { type: 'LOAD_CART'; payload: CartItem[] };
 
@@ -41,11 +56,22 @@ export const variantsMatch = (
   return a.name === b.name && a.color === b.color;
 };
 
+/**
+ * Cart line identity. `variantId` and `configHash` are part of it because
+ * comparing only {name, color} merged genuinely distinct configurations — two
+ * variants sharing a display name became one line at the wrong price.
+ */
+export const itemsMatch = (a: CartItemIdentity, b: CartItemIdentity): boolean =>
+  a.id === b.id &&
+  (a.variantId ?? '') === (b.variantId ?? '') &&
+  (a.configHash ?? '') === (b.configHash ?? '') &&
+  variantsMatch(a.variant, b.variant);
+
 const CartContext = createContext<{
   state: CartState;
   addItem: (item: Omit<CartItem, 'quantity'>, quantityToAdd?: number, maxStock?: number) => void;
-  removeItem: (id: string, variant?: CartItemVariant) => void;
-  updateQuantity: (id: string, variant: CartItemVariant | undefined, quantity: number, maxStock?: number) => void;
+  removeItem: (identity: CartItemIdentity) => void;
+  updateQuantity: (identity: CartItemIdentity, quantity: number, maxStock?: number) => void;
   clearCart: () => void;
   isCartOpen: boolean;
   openCart: () => void;
@@ -60,8 +86,7 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
   switch (action.type) {
     case 'ADD_ITEM': {
       const existingItemIndex = state.items.findIndex(item =>
-        item.id === action.payload.id &&
-        variantsMatch(item.variant, action.payload.variant)
+        itemsMatch(item, action.payload)
       );
 
       let newItems: CartItem[];
@@ -97,10 +122,7 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
     }
 
     case 'REMOVE_ITEM': {
-      const newItems = state.items.filter(item =>
-        !(item.id === action.payload.id &&
-          variantsMatch(item.variant, action.payload.variant))
-      );
+      const newItems = state.items.filter(item => !itemsMatch(item, action.payload));
       const total = newItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       const itemCount = newItems.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -109,8 +131,7 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
 
     case 'UPDATE_QUANTITY': {
       const newItems = state.items.map(item => {
-        const isMatch = item.id === action.payload.id &&
-                       variantsMatch(item.variant, action.payload.variant);
+        const isMatch = itemsMatch(item, action.payload);
 
         if (isMatch) {
           const newQuantity = action.payload.maxStock !== undefined
@@ -161,68 +182,83 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const openCart = () => setIsCartOpen(true);
   const closeCart = () => setIsCartOpen(false);
 
-  // Validate cart items against database
+  /**
+   * Re-check cart lines against the database: drop archived/out-of-stock
+   * items and correct stale prices.
+   *
+   * This previously fetched `/api/products`, a route that does not exist, so
+   * every response was a 404 and validation silently no-opped.
+   */
   const validateCartItems = async (items: CartItem[]): Promise<CartItem[]> => {
+    interface StockVariant {
+      variantId: string;
+      stock: number;
+      priceMinor: number;
+      available: boolean;
+    }
+    interface StockResponse {
+      success: boolean;
+      productStatus?: string;
+      variants?: StockVariant[];
+    }
+
     try {
-      const productIds = [...new Set(items.map(item => item.id))];
+      const productIds = [...new Set(items.map((item) => item.id))];
       if (productIds.length === 0) return [];
 
-      const response = await fetch('/api/products');
-      if (!response.ok) {
-        return items;
-      }
-
-      const allProducts = await response.json();
-      const productList = allProducts.products || allProducts.items || [];
-
-      interface CartProductVariant {
-        name?: string;
-        pricePiasters?: number;
-        price?: number;
-        stock?: number;
-      }
-
-      interface CartProduct {
-        _id?: string;
-        id?: string;
-        isActive?: boolean;
-        status?: string;
-        pricePiasters?: number;
-        price?: number;
-        stock?: number;
-        stockQuantity?: number;
-        variants?: CartProductVariant[];
-      }
-
-      const validItems = items.filter(cartItem => {
-        const product = productList.find((p: CartProduct) => (p._id || p.id) === cartItem.id);
-        if (!product) return false;
-        if (product.isActive === false || product.status === 'archived') return false;
-
-        if (cartItem.variant) {
-          const variant = product.variants?.find((v: CartProductVariant) => v.name === cartItem.variant?.name);
-          if (variant && variant.stock === 0) return false;
-
-          const currentPrice = (variant?.pricePiasters ? variant.pricePiasters / 100 : undefined) ||
-                               (variant?.price ? variant.price : undefined) ||
-                               (product.pricePiasters ? product.pricePiasters / 100 : product.price) || 0;
-
-          if (currentPrice > 0 && cartItem.price !== currentPrice) {
-            cartItem.price = currentPrice;
+      const entries = await Promise.all(
+        productIds.map(async (id): Promise<[string, StockResponse | null]> => {
+          try {
+            const res = await fetch(`/api/products/stock?id=${encodeURIComponent(id)}`);
+            if (!res.ok) return [id, null];
+            return [id, (await res.json()) as StockResponse];
+          } catch {
+            return [id, null];
           }
-        } else {
-          if (product.stock === 0 || product.stockQuantity === 0) return false;
+        })
+      );
 
-          const currentPrice = (product.pricePiasters ? product.pricePiasters / 100 : product.price) || 0;
-          if (currentPrice > 0 && cartItem.price !== currentPrice) {
-            cartItem.price = currentPrice;
-          }
+      const stockByProduct = new Map(entries);
+
+      // If every lookup failed (offline, API down), leave the cart untouched
+      // rather than emptying someone's bag on a transient error.
+      if ([...stockByProduct.values()].every((v) => v === null)) return items;
+
+      return items.reduce<CartItem[]>((kept, cartItem) => {
+        // Composed items (bouquets) are priced server-side at checkout and
+        // have no catalog product to validate against.
+        if (cartItem.kind === 'bouquet') {
+          kept.push(cartItem);
+          return kept;
         }
 
-        return true;
-      });
+        const product = stockByProduct.get(cartItem.id);
+        if (product === null) {
+          kept.push(cartItem); // lookup failed — keep, don't guess
+          return kept;
+        }
+        if (!product?.success) return kept; // 404 / archived — drop
+        if (product.productStatus && product.productStatus !== 'active') return kept;
 
-      return validItems;
+        const variants = product.variants ?? [];
+        const variant = cartItem.variantId
+          ? variants.find((v) => v.variantId === cartItem.variantId)
+          : undefined;
+
+        if (variant) {
+          if (!variant.available) return kept;
+          const currentPrice = variant.priceMinor / 100;
+          kept.push(currentPrice > 0 && currentPrice !== cartItem.price
+            ? { ...cartItem, price: currentPrice, stock: variant.stock }
+            : { ...cartItem, stock: variant.stock });
+          return kept;
+        }
+
+        // No resolvable variant — keep only if the product has any stock left.
+        if (variants.length > 0 && !variants.some((v) => v.available)) return kept;
+        kept.push(cartItem);
+        return kept;
+      }, []);
     } catch (error) {
       console.error('Error validating cart items:', error);
       return items;
@@ -288,12 +324,12 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     openCart();
   };
 
-  const removeItem = (id: string, variant?: CartItemVariant) => {
-    dispatch({ type: 'REMOVE_ITEM', payload: { id, variant } });
+  const removeItem = (identity: CartItemIdentity) => {
+    dispatch({ type: 'REMOVE_ITEM', payload: identity });
   };
 
-  const updateQuantity = (id: string, variant: CartItemVariant | undefined, quantity: number, maxStock?: number) => {
-    dispatch({ type: 'UPDATE_QUANTITY', payload: { id, variant, quantity, maxStock } });
+  const updateQuantity = (identity: CartItemIdentity, quantity: number, maxStock?: number) => {
+    dispatch({ type: 'UPDATE_QUANTITY', payload: { ...identity, quantity, maxStock } });
   };
 
   const clearCart = () => {

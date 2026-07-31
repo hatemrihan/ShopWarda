@@ -140,7 +140,13 @@ export function ProductForm({ product, categories }: ProductFormProps) {
   const [status, setStatus] = useState<'draft' | 'active' | 'archived'>(product?.status ?? 'draft');
 
   // Options & Variants
-  const [options, setOptions] = useState<OptionDef[]>(product?.options ?? []);
+  // The form edits labels; the service slugifies them into keys on save.
+  const [options, setOptions] = useState<OptionDef[]>(
+    product?.options?.map((o) => ({
+      name: o.label,
+      values: o.values.map((v) => v.label),
+    })) ?? []
+  );
   const [variants, setVariants] = useState<VariantRow[]>(
     product?.variants.map((v) => ({
       sku: v.sku || 'DEFAULT', optionValues: v.optionValues, pricePiasters: v.pricePiasters,

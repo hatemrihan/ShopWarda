@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   try {
     await connectDB();
     const product = await Product.findById(productId)
-      .select('name variants._id variants.sku variants.stock variants.status')
+      .select('name status variants._id variants.sku variants.stock variants.status variants.priceMinor')
       .lean();
 
     if (!product) {
@@ -34,6 +34,8 @@ export async function GET(req: NextRequest) {
       variantId: v._id.toString(),
       sku: v.sku,
       stock: v.stock,
+      // Included so the cart can correct a stale price it has cached locally.
+      priceMinor: v.priceMinor,
       available: v.status === 'active' && v.stock > 0,
     }));
 
@@ -41,6 +43,7 @@ export async function GET(req: NextRequest) {
       success: true,
       productId,
       productName: product.name,
+      productStatus: product.status,
       variants,
     });
   } catch (error) {

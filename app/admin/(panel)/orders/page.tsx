@@ -267,6 +267,20 @@ async function exportToPDF(orders: Order[]) {
 
 // ── Page ──────────────────────────────────────────────────────
 
+const PAGE_SIZE = 100;
+
+interface OrdersPageResponse {
+  success: boolean;
+  orders?: Order[];
+  pagination?: { totalPages?: number };
+}
+
+/** Pure fetch — no React state, so effects can set state inside a callback. */
+async function loadOrdersPage(page: number, pageSize: number): Promise<OrdersPageResponse> {
+  const res = await fetch(`/api/orders?page=${page}&pageSize=${pageSize}`);
+  return res.json();
+}
+
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -274,6 +288,9 @@ export default function AdminOrdersPage() {
   const [viewOrder, setViewOrder] = useState<Order | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // Manual order dialog
   const [showManual, setShowManual] = useState(false);
@@ -282,26 +299,38 @@ export default function AdminOrdersPage() {
 
   // ── Fetch ────────────────────────────────────────────────
 
-  const fetchOrders = useCallback(async () => {
+  // The API is paginated (it used to return every order ever placed). We load
+  // a page at a time and append, so the client-side search below still works
+  // across everything that has been loaded.
+
+  const applyPage = useCallback(
+    (targetPage: number, data: { orders?: Order[]; pagination?: { totalPages?: number } }) => {
+      setOrders((prev) =>
+        targetPage === 1 ? (data.orders ?? []) : [...prev, ...(data.orders ?? [])]
+      );
+      setPage(targetPage);
+      setHasMore(targetPage < (data.pagination?.totalPages ?? 1));
+    },
+    []
+  );
+
+  const fetchOrders = useCallback(async (targetPage = 1) => {
     try {
-      const res = await fetch('/api/orders');
-      const data = await res.json();
-      if (data.success) setOrders(data.orders ?? []);
+      const data = await loadOrdersPage(targetPage, PAGE_SIZE);
+      if (data.success) applyPage(targetPage, data);
     } catch {
       toast.error('Failed to load orders');
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  }, []);
+  }, [applyPage]);
 
   useEffect(() => {
     let mounted = true;
-    fetch('/api/orders')
-      .then((res) => res.json())
+    loadOrdersPage(1, PAGE_SIZE)
       .then((data) => {
-        if (mounted && data.success) {
-          setOrders(data.orders ?? []);
-        }
+        if (mounted && data.success) applyPage(1, data);
       })
       .catch(() => {
         if (mounted) toast.error('Failed to load orders');
@@ -313,7 +342,12 @@ export default function AdminOrdersPage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [applyPage]);
+
+  const loadMore = () => {
+    setLoadingMore(true);
+    fetchOrders(page + 1);
+  };
 
   // ── Status update ────────────────────────────────────────
 
@@ -777,6 +811,21 @@ export default function AdminOrdersPage() {
             <div className="text-center py-12">
               <Search className="h-6 w-6 text-white/20 mx-auto mb-3" />
               <p className="text-[13px] text-white/30">No orders match &quot;{search}&quot;</p>
+            </div>
+          )}
+
+          {hasMore && (
+            <div className="flex justify-center py-6">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="text-white/50 hover:text-white hover:bg-white/[0.04] text-[13px]"
+              >
+                {loadingMore && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
+                Load older orders
+              </Button>
             </div>
           )}
         </>

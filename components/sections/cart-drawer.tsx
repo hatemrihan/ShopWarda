@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useCart } from '@/features/cart/context/cart-context';
+import { useCart, type CartItem } from '@/features/cart/context/cart-context';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Plus, Minus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -14,23 +14,17 @@ export function CartDrawer() {
     return `${price.toLocaleString('en-US', { minimumFractionDigits: 2 })} EGP`;
   };
 
-  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-  const handleUpdateQuantity = (itemId: string, variant: any, newQuantity: number) => {
+  const handleUpdateQuantity = (item: CartItem, newQuantity: number) => {
+    // Identity now includes variantId/configHash, so pass the line itself
+    // rather than re-finding it by a partial match.
     if (newQuantity <= 0) {
-      removeItem(itemId, variant);
+      removeItem(item);
       return;
     }
 
-    const item = cartState.items.find(item =>
-      item.id === itemId &&
-      JSON.stringify(item.variant) === JSON.stringify(variant)
-    );
-
-    if (item) {
-      const maxQuantity = item.stock !== undefined ? item.stock : 999;
-      const validQuantity = Math.min(newQuantity, maxQuantity);
-      updateQuantity(item.id, item.variant, validQuantity, item.stock);
-    }
+    const maxQuantity = item.stock !== undefined ? item.stock : 999;
+    const validQuantity = Math.min(newQuantity, maxQuantity);
+    updateQuantity(item, validQuantity, item.stock);
   };
 
   const handleCheckout = () => {
@@ -99,7 +93,7 @@ export function CartDrawer() {
               ) : (
                 <div className="space-y-6">
                   {cartState.items.map((item) => (
-                    <div key={`${item.id}-${JSON.stringify(item.variant)}`} className="flex gap-4">
+                    <div key={`${item.id}-${item.variantId ?? ""}-${item.configHash ?? ""}-${JSON.stringify(item.variant)}`} className="flex gap-4">
                       {/* Product Image */}
                       <div
                         className="w-20 h-20 bg-gray-100 overflow-hidden cursor-pointer flex-shrink-0"
@@ -129,7 +123,7 @@ export function CartDrawer() {
                           {/* Quantity Controls */}
                           <div className="flex items-center space-x-2">
                             <button
-                              onClick={() => handleUpdateQuantity(item.id, item.variant, item.quantity - 1)}
+                              onClick={() => handleUpdateQuantity(item, item.quantity - 1)}
                               disabled={item.quantity <= 1}
                               className={`w-6 h-6 border flex items-center justify-center text-xs ${
                                 item.quantity <= 1
@@ -145,7 +139,7 @@ export function CartDrawer() {
                             </span>
 
                             <button
-                              onClick={() => handleUpdateQuantity(item.id, item.variant, item.quantity + 1)}
+                              onClick={() => handleUpdateQuantity(item, item.quantity + 1)}
                               disabled={item.stock !== undefined && item.quantity >= item.stock}
                               className={`w-6 h-6 border flex items-center justify-center text-xs ${
                                 item.stock !== undefined && item.quantity >= item.stock
@@ -167,7 +161,7 @@ export function CartDrawer() {
 
                         {/* Remove Button */}
                         <button
-                          onClick={() => removeItem(item.id, item.variant)}
+                          onClick={() => removeItem(item)}
                           className="text-xs text-gray-400 hover:text-red-500 mt-2"
                         >
                           Remove
@@ -235,7 +229,7 @@ export function CartDrawer() {
               ) : (
                 <div className="space-y-6">
                   {cartState.items.map((item) => (
-                    <div key={`${item.id}-${JSON.stringify(item.variant)}`} className="flex gap-4">
+                    <div key={`${item.id}-${item.variantId ?? ""}-${item.configHash ?? ""}-${JSON.stringify(item.variant)}`} className="flex gap-4">
                       {/* Product Image */}
                       <div
                         className="w-24 h-24 bg-gray-100 overflow-hidden cursor-pointer flex-shrink-0"
@@ -265,7 +259,7 @@ export function CartDrawer() {
                           {/* Quantity Controls */}
                           <div className="flex items-center space-x-3">
                             <button
-                              onClick={() => handleUpdateQuantity(item.id, item.variant, item.quantity - 1)}
+                              onClick={() => handleUpdateQuantity(item, item.quantity - 1)}
                               disabled={item.quantity <= 1}
                               className={`w-8 h-8 border flex items-center justify-center ${
                                 item.quantity <= 1
@@ -281,7 +275,7 @@ export function CartDrawer() {
                             </span>
 
                             <button
-                              onClick={() => handleUpdateQuantity(item.id, item.variant, item.quantity + 1)}
+                              onClick={() => handleUpdateQuantity(item, item.quantity + 1)}
                               disabled={item.stock !== undefined && item.quantity >= item.stock}
                               className={`w-8 h-8 border flex items-center justify-center ${
                                 item.stock !== undefined && item.quantity >= item.stock
@@ -303,7 +297,7 @@ export function CartDrawer() {
 
                         {/* Remove Button */}
                         <button
-                          onClick={() => removeItem(item.id, item.variant)}
+                          onClick={() => removeItem(item)}
                           className="text-sm text-gray-400 hover:text-red-500"
                         >
                           Remove

@@ -11,6 +11,7 @@ import { sendOrderConfirmationEmail, sendAdminOrderNotification } from '@/lib/em
 import { guardAdmin, getClientIp } from '@/lib/auth/api-guard';
 import { checkRateLimit, checkoutLimiter } from '@/lib/security/rate-limit';
 import { RateLimitError } from '@/lib/errors';
+import { ORDER_STATUS } from '@/lib/db/types';
 import type {
   IOrderItem,
   IEgyptAddress,
@@ -510,13 +511,31 @@ function buildProofUrl(assetKey: string): string {
  * GET /api/orders
  * Returns all orders formatted for admin panel with all fields.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const denied = await guardAdmin();
   if (denied) return denied;
 
   try {
     await connectDB();
-    const orders = (await Order.find().sort({ createdAt: -1 }).lean()) as unknown as OrderRaw[];
+
+    // Paginated: this used to return every order ever placed on each load.
+    const params = req.nextUrl.searchParams;
+    const page = Math.max(1, Number(params.get('page')) || 1);
+    const pageSize = Math.min(200, Math.max(1, Number(params.get('pageSize')) || 50));
+    // Only accept a real status; anything else is treated as "no filter".
+    const statusParam = params.get('status');
+    const statusFilter = ORDER_STATUS.find((s) => s === statusParam);
+
+    const query: Record<string, unknown> = statusFilter ? { status: statusFilter } : {};
+
+    const [orders, total] = await Promise.all([
+      Order.find(query)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .lean() as unknown as Promise<OrderRaw[]>,
+      Order.countDocuments(query),
+    ]);
 
     const formatted = orders.map((o: OrderRaw) => ({
       id: o._id.toString(),
@@ -560,7 +579,11 @@ export async function GET() {
       created_at: o.createdAt,
     }));
 
-    return NextResponse.json({ success: true, orders: formatted });
+    return NextResponse.json({
+      success: true,
+      orders: formatted,
+      pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+    });
   } catch (error) {
     console.error('[GET /api/orders]', error);
     return NextResponse.json({ success: false, error: 'Failed to fetch orders' }, { status: 500 });

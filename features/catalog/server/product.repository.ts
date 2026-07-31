@@ -30,9 +30,16 @@ function toProductDTO(doc: IProduct, categoryNames: string[] = []): ProductDTO {
     type: doc.type,
     categoryIds: (doc.categoryIds ?? []).map((c) => c.toString()),
     categoryNames,
+    // Emit keys alongside labels. `variants[].optionValues` are keys, so a
+    // label-only shape here could never be matched against them.
     options: doc.options?.map((o) => ({
-      name: o.label,
-      values: o.values.map((v) => v.label),
+      key: o.key,
+      label: o.label,
+      values: o.values.map((v) => ({
+        key: v.key,
+        label: v.label,
+        swatchHex: v.swatchHex,
+      })),
     })),
     variants: (doc.variants ?? []).map((v, index) => ({
       id: (v as { _id?: { toString(): string } })._id?.toString() ?? '',

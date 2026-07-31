@@ -40,9 +40,27 @@ export interface CategoryListItem {
 
 // ─── Product DTOs ───────────────────────────────────────────────
 
+/** A selectable value. `key` is the stable identity; `label` is for display. */
+export interface OptionValueDTO {
+  key: string;
+  label: string;
+  swatchHex?: string;
+}
+
+export interface OptionDTO {
+  key: string;
+  label: string;
+  values: OptionValueDTO[];
+}
+
 export interface VariantDTO {
   id: string;
   sku: string;
+  /**
+   * Keyed by option/value `key` — the same identity space as `OptionDTO`.
+   * These used to be compared against option *labels*, which never matched for
+   * any multi-word or capitalized value.
+   */
   optionValues: { name: string; value: string }[];
   pricePiasters: number;
   compareAtPricePiasters?: number;
@@ -74,7 +92,7 @@ export interface ProductDTO {
   type: 'simple' | 'bundle';
   categoryIds: string[];
   categoryNames?: string[];
-  options?: { name: string; values: string[] }[];
+  options?: OptionDTO[];
   variants: VariantDTO[];
   media: MediaDTO[];
   seo?: {
