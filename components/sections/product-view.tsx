@@ -166,7 +166,8 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
     return opt.values.find((v) => v.key === selectedKey)?.label;
   };
 
-  const categoryName = product.categoryNames?.[0] || 'Ready to Wear';
+  // 'Ready to Wear' was an apparel leftover; wrong on a florist's catalogue.
+  const categoryName = product.categoryNames?.[0] || 'Shop';
 
   return (
     <div className="min-h-screen bg-white">
@@ -340,15 +341,19 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
               </div>
             )}
 
-            {/* Dynamic Size Selection from Admin Options */}
-            <div className="space-y-4 pt-2">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-black">
-                  {labelFor(sizeOption) ?? 'Please select size'}
-                </p>
-              </div>
+            {/* Option selector — only when the product actually defines one.
+                A simple product (wrapping paper, a vase, a card) has no
+                options, and used to render a disabled dropdown labelled
+                "Please select size" with a stray "Select Recipient's
+                Governorate" placeholder. */}
+            {sizeOption && (
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-black">
+                    {labelFor(sizeOption) ?? `Please select ${sizeOption.label.toLowerCase()}`}
+                  </p>
+                </div>
 
-              {sizeOption ? (
                 <Select
                   value={selectedOptions[sizeOption.key] || ''}
                   onValueChange={(val: string | null) => {
@@ -361,7 +366,7 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
                   }}
                 >
                   <SelectTrigger className="w-full bg-white border border-black text-black h-12 text-sm font-normal rounded-none">
-                    <SelectValue placeholder="Select Size" />
+                    <SelectValue placeholder={`Select ${sizeOption.label}`} />
                   </SelectTrigger>
                   <SelectContent className="bg-white border border-black rounded-none">
                     {sizeOption.values.map((size) => (
@@ -375,20 +380,11 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
                     ))}
                   </SelectContent>
                 </Select>
-              ) : (
-                <Select value="one-size" disabled>
-                  <SelectTrigger className="w-full bg-white border border-black text-black h-12 text-sm font-normal rounded-none">
-                    <SelectValue placeholder="Select Recipient's Governorate" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border border-black rounded-none">
-                    <SelectItem value="one-size">One Size</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Size Guide Link — only if enabled in admin */}
-            {sizeGuide?.enabled && (
+            {sizeGuide?.enabled && sizeOption && (
               <div className="flex justify-end">
                 <button
                   type="button"
