@@ -25,8 +25,8 @@ interface BouquetShowcaseProps {
 export function BouquetShowcase({ flowers, wraps, settings }: BouquetShowcaseProps) {
   const [imgLoaded, setImgLoaded] = useState(false);
 
-  const activeFlowers = flowers.filter((f) => f.status === 'active' && f.selectable);
-  const activeWraps = wraps.filter((w) => w.available && w.status === 'active');
+  const activeFlowers = flowers.filter((f) => f.selectable);
+  const activeWraps = wraps.filter((w) => w.available);
 
   // Static editorial hero image
   const DesignImage = '/images/design-image.avif';

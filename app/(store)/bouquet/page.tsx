@@ -1,4 +1,3 @@
-import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { getActiveCatalog } from '@/features/bouquet/server/bouquet.service';
@@ -19,13 +18,8 @@ export default async function BouquetPage() {
     return null;
   });
 
-  // If the builder is disabled entirely, 404
-  if (!catalog || !catalog.settings.enabled) {
-    notFound();
-  }
-
-  // If enabled but no flowers/wraps yet, show a friendly empty state
-  if (catalog.flowers.length === 0 && catalog.wraps.length === 0) {
+  // If catalogue is unavailable or has no flowers/wraps yet, show a friendly empty state
+  if (!catalog || (catalog.flowers.length === 0 && catalog.wraps.length === 0)) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center px-6">
         <EmptyState

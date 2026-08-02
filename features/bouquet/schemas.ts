@@ -3,7 +3,7 @@
  */
 
 import { z } from 'zod';
-import { BOUQUET_SEASONS, BOUQUET_STATUS } from '@/features/bouquet/constants';
+import { BOUQUET_SEASONS } from '@/features/bouquet/constants';
 
 const hexColor = z
   .string()
@@ -40,7 +40,6 @@ export const flowerInputSchema = z.object({
   available: z.boolean().default(true),
   media: z.array(mediaSchema).default([]),
   sortOrder: z.number().int().min(0).default(0),
-  status: z.enum(BOUQUET_STATUS).default('active'),
 });
 
 export const wrapInputSchema = z.object({
@@ -52,11 +51,9 @@ export const wrapInputSchema = z.object({
   swatchHex: hexColor.optional().or(z.literal('')),
   available: z.boolean().default(true),
   sortOrder: z.number().int().min(0).default(0),
-  status: z.enum(BOUQUET_STATUS).default('active'),
 });
 
 export const bouquetSettingsSchema = z.object({
-  enabled: z.boolean(),
   minStems: z.number().int().min(1).max(500),
   maxStems: z.number().int().min(1).max(500),
   basePriceMinor: z.number().int().min(0),

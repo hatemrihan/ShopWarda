@@ -8,6 +8,3 @@
 
 export const BOUQUET_SEASONS = ['spring', 'summer', 'autumn', 'winter'] as const;
 export type BouquetSeason = (typeof BOUQUET_SEASONS)[number];
-
-export const BOUQUET_STATUS = ['draft', 'active', 'archived'] as const;
-export type BouquetStatus = (typeof BOUQUET_STATUS)[number];

@@ -18,25 +18,7 @@ type SearchResult = {
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const [scrolled, setScrolled] = useState(false);
-  // The bouquet builder ships behind an admin flag; don't advertise a 404.
-  const [bouquetEnabled, setBouquetEnabled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-    fetch('/api/bouquet/enabled')
-      .then((res) => res.json())
-      .then((data) => {
-        if (mounted) setBouquetEnabled(Boolean(data?.enabled));
-      })
-      .catch(() => {
-        /* leave the link hidden */
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
   const { state: cartState, openCart } = useCart();
 
   // ── Search state ─────────────────────────────────────────────
@@ -67,11 +49,7 @@ export function SiteHeader() {
     });
   }, []);
 
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 40);
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+
 
   // Lock body scroll when mobile menu is open
   useEffect(() => {
@@ -143,7 +121,7 @@ export function SiteHeader() {
     }, 300);
   }, []);
 
-  const isHomePage = pathname === '/';
+
   // Always use dark style — hero has a light background
   const isTransparentHeader = false;
 
@@ -177,9 +155,7 @@ export function SiteHeader() {
               {[
                 { label: 'Shop', href: '/shop' },
                 { label: 'Categories', href: '/categories' },
-                ...(bouquetEnabled ? [
-                  { label: 'Build a Bouquet', href: '/bouquet' },
-                ] : []),
+                { label: 'Build a Bouquet', href: '/bouquet' },
                 { label: 'About', href: '/about' },
                 { label: 'Contact', href: '/contact' },
               ].map((item) => (
@@ -459,9 +435,7 @@ export function SiteHeader() {
           {[
             { label: 'Shop', href: '/shop' },
             { label: 'Categories', href: '/categories' },
-            ...(bouquetEnabled ? [
-              { label: 'Build a Bouquet', href: '/bouquet' },
-            ] : []),
+            { label: 'Build a Bouquet', href: '/bouquet' },
           ].map((item) => (
             <Link
               key={item.href}

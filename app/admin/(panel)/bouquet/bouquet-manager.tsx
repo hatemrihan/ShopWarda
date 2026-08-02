@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { MediaGalleryUpload, type MediaFile } from '@/components/admin/media-gallery-upload';
 
 import type { FlowerDTO, WrapDTO, BouquetSettingsDTO, FlowerColorDTO } from '@/features/bouquet/types';
-import { BOUQUET_SEASONS, type BouquetSeason, BOUQUET_STATUS, type BouquetStatus } from '@/features/bouquet/constants';
+import { BOUQUET_SEASONS, type BouquetSeason } from '@/features/bouquet/constants';
 import {
   createFlowerAction,
   updateFlowerAction,
@@ -66,7 +66,6 @@ type FlowerDraft = {
   available: boolean;
   media: MediaFile[];
   sortOrder: number;
-  status: BouquetStatus;
 };
 
 type WrapDraft = {
@@ -79,17 +78,16 @@ type WrapDraft = {
   swatchHex: string;
   available: boolean;
   sortOrder: number;
-  status: BouquetStatus;
 };
 
 const EMPTY_FLOWER: FlowerDraft = {
   name: '', nameAr: '', pricePerStemEgp: 0, colors: [], seasons: [],
-  available: true, media: [], sortOrder: 0, status: 'active',
+  available: true, media: [], sortOrder: 0,
 };
 
 const EMPTY_WRAP: WrapDraft = {
   name: '', nameAr: '', material: 'paper', priceEgp: 0, media: [],
-  swatchHex: '', available: true, sortOrder: 0, status: 'active',
+  swatchHex: '', available: true, sortOrder: 0,
 };
 
 // ── Component ─────────────────────────────────────────────────
@@ -124,7 +122,6 @@ export function BouquetManager({ initialFlowers, initialWraps, initialSettings }
       available: f.available,
       media: f.media.map((m) => ({ assetKey: m.publicUrl, url: m.publicUrl, alt: m.alt ?? '', type: 'image' as const })),
       sortOrder: f.sortOrder,
-      status: f.status,
     });
 
   const saveFlower = () => {
@@ -159,7 +156,6 @@ export function BouquetManager({ initialFlowers, initialWraps, initialSettings }
         sortOrder: i,
       })),
       sortOrder: flowerDraft.sortOrder,
-      status: flowerDraft.status,
     };
 
     startTransition(async () => {
@@ -211,7 +207,6 @@ export function BouquetManager({ initialFlowers, initialWraps, initialSettings }
       swatchHex: w.swatchHex ?? '',
       available: w.available,
       sortOrder: w.sortOrder,
-      status: w.status,
     });
 
   const saveWrap = () => {
@@ -230,7 +225,6 @@ export function BouquetManager({ initialFlowers, initialWraps, initialSettings }
       swatchHex: wrapDraft.swatchHex || '',
       available: wrapDraft.available,
       sortOrder: wrapDraft.sortOrder,
-      status: wrapDraft.status,
     };
 
     startTransition(async () => {
@@ -295,13 +289,9 @@ export function BouquetManager({ initialFlowers, initialWraps, initialSettings }
         </div>
 
         <div
-          className={`px-3 py-1.5 rounded-lg border text-[12px] ${
-            settings.enabled
-              ? 'bg-green-500/10 border-green-500/20 text-green-400'
-              : 'bg-white/[0.03] border-white/[0.06] text-white/40'
-          }`}
+          className="px-3 py-1.5 rounded-lg border text-[12px] bg-green-500/10 border-green-500/20 text-green-400"
         >
-          {settings.enabled ? 'Live on storefront' : 'Hidden from storefront'}
+          Live on storefront
         </div>
       </div>
 
@@ -359,11 +349,7 @@ export function BouquetManager({ initialFlowers, initialWraps, initialSettings }
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[13px] text-white">{f.name}</span>
-                    {f.status !== 'active' && (
-                      <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-white/[0.05] text-white/40">
-                        {f.status}
-                      </span>
-                    )}
+
                     {!f.inSeason && (
                       <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400">
                         out of season
@@ -589,22 +575,6 @@ export function BouquetManager({ initialFlowers, initialWraps, initialSettings }
               </div>
 
               <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <InputLabel>Status</InputLabel>
-                  <select
-                    className={inputClass}
-                    value={flowerDraft.status}
-                    onChange={(e) =>
-                      setFlowerDraft({ ...flowerDraft, status: e.target.value as BouquetStatus })
-                    }
-                  >
-                    {BOUQUET_STATUS.map((s) => (
-                      <option key={s} value={s} className="bg-stone-900">
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
                 <label className="flex items-end gap-2 text-[13px] text-white/60 pb-3">
                   <input
                     type="checkbox"
@@ -681,11 +651,7 @@ export function BouquetManager({ initialFlowers, initialWraps, initialSettings }
                     <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-white/[0.05] text-white/40">
                       {w.material}
                     </span>
-                    {w.status !== 'active' && (
-                      <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-white/[0.05] text-white/40">
-                        {w.status}
-                      </span>
-                    )}
+
                   </div>
                   <span className="font-mono text-[12px] text-white/50">
                     +EGP {minorToEgp(w.priceMinor).toLocaleString()}
@@ -760,22 +726,7 @@ export function BouquetManager({ initialFlowers, initialWraps, initialSettings }
                     maxFiles={1}
                   />
                 </div>
-                <div>
-                  <InputLabel>Status</InputLabel>
-                  <select
-                    className={inputClass}
-                    value={wrapDraft.status}
-                    onChange={(e) =>
-                      setWrapDraft({ ...wrapDraft, status: e.target.value as BouquetStatus })
-                    }
-                  >
-                    {BOUQUET_STATUS.map((s) => (
-                      <option key={s} value={s} className="bg-stone-900">
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+
                 <label className="flex items-end gap-2 text-[13px] text-white/60 pb-3">
                   <input
                     type="checkbox"
@@ -812,17 +763,8 @@ export function BouquetManager({ initialFlowers, initialWraps, initialSettings }
       {/* ── Settings tab ─────────────────────────────────────── */}
       {tab === 'settings' && (
         <Section title="Builder settings">
-          <label className="flex items-center gap-2 text-[13px] text-white/70">
-            <input
-              type="checkbox"
-              checked={settings.enabled}
-              onChange={(e) => setSettings({ ...settings, enabled: e.target.checked })}
-            />
-            Show the bouquet builder on the storefront
-          </label>
-          <p className="text-[11px] text-white/30 -mt-2">
-            Add at least one flower and one wrapping (both set to <em>active</em>) before turning
-            this on.
+          <p className="text-[11px] text-white/30">
+            The bouquet builder is always visible on the storefront. Use the &quot;Available&quot; toggle on individual flowers and wraps to control what customers can select.
           </p>
 
           <div className="grid sm:grid-cols-2 gap-4">

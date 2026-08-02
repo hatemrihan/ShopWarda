@@ -32,10 +32,6 @@ export function priceBouquetAgainst(
 ): PricedBouquet {
   const { settings } = catalog;
 
-  if (!settings.enabled) {
-    throw new ValidationError('The bouquet builder is not currently available', {});
-  }
-
   const byId = new Map(catalog.flowers.map((f) => [f.id, f]));
 
   const pricedFlowers: PricedBouquet['flowers'] = [];
@@ -47,7 +43,7 @@ export function priceBouquetAgainst(
     if (!flower) {
       throw new ValidationError('One of the chosen flowers is no longer available', {});
     }
-    if (flower.status !== 'active' || !flower.selectable) {
+    if (!flower.selectable) {
       throw new ValidationError(`${flower.name} is not available right now`, {});
     }
 
@@ -94,7 +90,7 @@ export function priceBouquetAgainst(
 
   // ── Wrapping ────────────────────────────────────────────────
   const wrap = catalog.wraps.find((w) => w.id === config.wrapId);
-  if (!wrap || wrap.status !== 'active' || !wrap.available) {
+  if (!wrap || !wrap.available) {
     throw new ValidationError('The chosen wrapping is no longer available', {});
   }
 

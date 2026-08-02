@@ -10,15 +10,13 @@
 
 import mongoose, { Schema, type Document, type Model, type Types } from 'mongoose';
 import type { IProductMedia } from '../types';
-import { BOUQUET_SEASONS, BOUQUET_STATUS, type BouquetSeason, type BouquetStatus } from '@/features/bouquet/constants';
+import { BOUQUET_SEASONS, type BouquetSeason } from '@/features/bouquet/constants';
 
 // Enums live in features/bouquet/constants.ts so client components can import
 // them without dragging the Mongoose driver into the browser bundle.
 export {
   BOUQUET_SEASONS,
-  BOUQUET_STATUS,
   type BouquetSeason,
-  type BouquetStatus,
 } from '@/features/bouquet/constants';
 
 // ─── Flower colour ──────────────────────────────────────────────
@@ -59,7 +57,6 @@ export interface IBouquetFlower extends Document {
   available: boolean;
   media: IProductMedia[];
   sortOrder: number;
-  status: BouquetStatus;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -95,12 +92,11 @@ const bouquetFlowerSchema = new Schema<IBouquetFlower>(
     available: { type: Boolean, default: true },
     media: { type: [mediaSchema], default: [] },
     sortOrder: { type: Number, default: 0 },
-    status: { type: String, enum: BOUQUET_STATUS, default: 'draft', required: true },
   },
   { timestamps: true, collection: 'bouquet-flowers' }
 );
 
-bouquetFlowerSchema.index({ status: 1, sortOrder: 1 }, { name: 'active_flowers' });
+bouquetFlowerSchema.index({ available: 1, sortOrder: 1 }, { name: 'available_flowers' });
 
 // ─── Wrapping ───────────────────────────────────────────────────
 
@@ -115,7 +111,6 @@ export interface IBouquetWrap extends Document {
   swatchHex?: string;
   available: boolean;
   sortOrder: number;
-  status: BouquetStatus;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -138,12 +133,11 @@ const bouquetWrapSchema = new Schema<IBouquetWrap>(
     swatchHex: String,
     available: { type: Boolean, default: true },
     sortOrder: { type: Number, default: 0 },
-    status: { type: String, enum: BOUQUET_STATUS, default: 'draft', required: true },
   },
   { timestamps: true, collection: 'bouquet-wraps' }
 );
 
-bouquetWrapSchema.index({ status: 1, sortOrder: 1 }, { name: 'active_wraps' });
+bouquetWrapSchema.index({ available: 1, sortOrder: 1 }, { name: 'available_wraps' });
 
 // ─── Exports ────────────────────────────────────────────────────
 

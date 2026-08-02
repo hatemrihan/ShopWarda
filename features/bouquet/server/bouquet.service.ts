@@ -15,7 +15,6 @@ import type {
 } from '../types';
 
 const DEFAULT_SETTINGS: BouquetSettingsDTO = {
-  enabled: false,
   minStems: 1,
   maxStems: 100,
   basePriceMinor: 0,
@@ -28,7 +27,6 @@ export async function getBouquetSettings(): Promise<BouquetSettingsDTO> {
   if (!b) return DEFAULT_SETTINGS;
 
   return {
-    enabled: b.enabled ?? false,
     minStems: b.minStems ?? DEFAULT_SETTINGS.minStems,
     maxStems: b.maxStems ?? DEFAULT_SETTINGS.maxStems,
     basePriceMinor: b.basePriceMinor ?? 0,

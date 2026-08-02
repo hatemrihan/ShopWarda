@@ -3,7 +3,7 @@
  * Money is integer piasters, like everywhere else on the server.
  */
 
-import type { BouquetSeason, BouquetStatus } from '@/features/bouquet/constants';
+import type { BouquetSeason } from '@/features/bouquet/constants';
 
 export interface FlowerColorDTO {
   key: string;
@@ -26,7 +26,6 @@ export interface FlowerDTO {
   media: { publicUrl: string; alt?: string }[];
   imageUrl?: string;
   sortOrder: number;
-  status: BouquetStatus;
   /** Derived: master toggle AND in season AND at least one available colour. */
   inSeason: boolean;
   selectable: boolean;
@@ -42,11 +41,9 @@ export interface WrapDTO {
   swatchHex?: string;
   available: boolean;
   sortOrder: number;
-  status: BouquetStatus;
 }
 
 export interface BouquetSettingsDTO {
-  enabled: boolean;
   minStems: number;
   maxStems: number;
   basePriceMinor: number;

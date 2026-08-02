@@ -18,7 +18,6 @@ function flower(overrides: Partial<FlowerDTO> = {}): FlowerDTO {
     available: true,
     media: [],
     sortOrder: 0,
-    status: 'active',
     inSeason: true,
     selectable: true,
     ...overrides,
@@ -33,13 +32,11 @@ function wrap(overrides: Partial<WrapDTO> = {}): WrapDTO {
     priceMinor: 7_500,
     available: true,
     sortOrder: 0,
-    status: 'active',
     ...overrides,
   };
 }
 
 const settings: BouquetSettingsDTO = {
-  enabled: true,
   minStems: 5,
   maxStems: 50,
   basePriceMinor: 2_500,
@@ -184,14 +181,7 @@ describe('priceBouquetAgainst', () => {
     ).toThrow(/200 characters or fewer/);
   });
 
-  it('refuses to price anything while the builder is disabled', () => {
-    expect(() =>
-      priceBouquetAgainst(
-        { flowers: [{ flowerId: 'rose', colorKey: 'red', qty: 6 }], wrapId: 'silk' },
-        catalog({ settings: { ...settings, enabled: false } }),
-      ),
-    ).toThrow(/not currently available/);
-  });
+
 
   it('allows a flower that defines no colours', () => {
     const plain = flower({ id: 'gyp', name: 'Gypsophila', colors: [] });

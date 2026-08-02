@@ -25,7 +25,6 @@ export default async function HomePage() {
 
   const showBouquet =
     bouquetCatalog &&
-    bouquetCatalog.settings.enabled &&
     (bouquetCatalog.flowers.length > 0 || bouquetCatalog.wraps.length > 0);
 
   return (

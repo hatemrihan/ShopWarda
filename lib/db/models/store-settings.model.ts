@@ -31,8 +31,6 @@ export interface IStoreSettings extends Document {
 }
 
 export interface IBouquetBuilderSettings {
-  /** Feature flag — the builder ships dark and is flipped on when seeded. */
-  enabled: boolean;
   minStems: number;
   maxStems: number;
   /** Arrangement fee added to every bouquet. */
@@ -135,7 +133,6 @@ const sizeGuideSchema = new Schema(
 
 const bouquetBuilderSchema = new Schema<IBouquetBuilderSettings>(
   {
-    enabled: { type: Boolean, default: false },
     minStems: { type: Number, default: 1, min: 1 },
     maxStems: { type: Number, default: 100, min: 1 },
     basePriceMinor: {

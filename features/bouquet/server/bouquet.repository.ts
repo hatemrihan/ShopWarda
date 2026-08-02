@@ -51,7 +51,6 @@ export function toFlowerDTO(doc: IBouquetFlower, season = currentSeason()): Flow
     media,
     imageUrl: media[0]?.publicUrl,
     sortOrder: doc.sortOrder ?? 0,
-    status: doc.status,
     inSeason,
     selectable: doc.available && inSeason && hasSelectableColor,
   };
@@ -68,7 +67,6 @@ export function toWrapDTO(doc: IBouquetWrap): WrapDTO {
     swatchHex: doc.swatchHex,
     available: doc.available,
     sortOrder: doc.sortOrder ?? 0,
-    status: doc.status,
   };
 }
 
@@ -79,7 +77,7 @@ export const bouquetRepository = {
     await connectDB();
     return includeInactive
       ? BouquetFlower.find().sort({ sortOrder: 1, name: 1 })
-      : BouquetFlower.find({ status: 'active' }).sort({ sortOrder: 1, name: 1 });
+      : BouquetFlower.find({ available: true }).sort({ sortOrder: 1, name: 1 });
   },
 
   async findFlowerById(id: string): Promise<IBouquetFlower | null> {
@@ -113,7 +111,7 @@ export const bouquetRepository = {
     await connectDB();
     return includeInactive
       ? BouquetWrap.find().sort({ sortOrder: 1, name: 1 })
-      : BouquetWrap.find({ status: 'active' }).sort({ sortOrder: 1, name: 1 });
+      : BouquetWrap.find({ available: true }).sort({ sortOrder: 1, name: 1 });
   },
 
   async findWrapById(id: string): Promise<IBouquetWrap | null> {
