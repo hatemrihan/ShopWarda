@@ -16,7 +16,7 @@ import type {
 
 const DEFAULT_SETTINGS: BouquetSettingsDTO = {
   enabled: false,
-  minStems: 5,
+  minStems: 1,
   maxStems: 100,
   basePriceMinor: 0,
   card: { enabled: true, priceMinor: 0, maxLength: 200 },

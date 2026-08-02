@@ -50,12 +50,15 @@ type Order = {
   payment_screenshot?: string | null;
   shipping_address: {
     address?: string;
+    area?: string;
     city?: string;
+    landmark?: string;
     lat?: number;
     lng?: number;
   } | null;
   governorate: string | null;
   notes: string | null;
+  delivery_notes?: string | null;
   created_at: string;
 };
 
@@ -846,26 +849,49 @@ export default function AdminOrdersPage() {
                 <div className="text-[13px] text-white/80 mt-1">{viewOrder.customer_name}</div>
                 {viewOrder.customer_email && <div className="text-[12px] text-white/40">{viewOrder.customer_email}</div>}
                 {viewOrder.customer_phone && <div className="text-[12px] text-white/40">{viewOrder.customer_phone}</div>}
-                {viewOrder.shipping_address?.address && (
-                  <div className="text-[12px] text-white/70 mt-0.5">
-                    {viewOrder.shipping_address.address}
-                  </div>
-                )}
-                {viewOrder.governorate && (
-                  <div className="text-[12px] text-white/40 mt-0.5">
-                    {viewOrder.governorate}{viewOrder.shipping_address?.city ? `, ${viewOrder.shipping_address.city}` : ''}
-                  </div>
-                )}
-                {viewOrder.shipping_address?.lat && viewOrder.shipping_address?.lng && (
-                  <a
-                    href={`https://www.google.com/maps?q=${viewOrder.shipping_address.lat},${viewOrder.shipping_address.lng}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[12px] text-blue-400 underline hover:text-blue-300 mt-1.5 inline-flex items-center gap-1.5 font-medium"
-                  >
-                    View location on Google Maps ↗
-                  </a>
-                )}
+              </div>
+
+              {/* Shipping Address — full details */}
+              <div>
+                <span className="text-[10px] text-white/30 uppercase tracking-wider font-medium">Shipping Address</span>
+                <div className="mt-1.5 space-y-1">
+                  {viewOrder.governorate && (
+                    <div className="text-[12px] text-white/70">
+                      {viewOrder.governorate}{viewOrder.shipping_address?.city ? `, ${viewOrder.shipping_address.city}` : ''}
+                    </div>
+                  )}
+                  {viewOrder.shipping_address?.area && (
+                    <div className="text-[12px] text-white/50">
+                      <span className="text-white/30">Area:</span> {viewOrder.shipping_address.area}
+                    </div>
+                  )}
+                  {viewOrder.shipping_address?.address && (
+                    <div className="text-[12px] text-white/70">
+                      {viewOrder.shipping_address.address}
+                    </div>
+                  )}
+                  {viewOrder.shipping_address?.landmark && (
+                    <div className="text-[12px] text-white/50">
+                      <span className="text-white/30">Landmark:</span> {viewOrder.shipping_address.landmark}
+                    </div>
+                  )}
+                  {viewOrder.delivery_notes && (
+                    <div className="text-[12px] text-white/50 mt-1 p-2 bg-white/[0.03] rounded border border-white/[0.06]">
+                      <span className="text-white/30 text-[10px] uppercase tracking-wider font-medium">Delivery Instructions:</span>
+                      <div className="mt-0.5 whitespace-pre-wrap">{viewOrder.delivery_notes}</div>
+                    </div>
+                  )}
+                  {viewOrder.shipping_address?.lat && viewOrder.shipping_address?.lng && (
+                    <a
+                      href={`https://www.google.com/maps?q=${viewOrder.shipping_address.lat},${viewOrder.shipping_address.lng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[12px] text-blue-400 underline hover:text-blue-300 mt-1 inline-flex items-center gap-1.5 font-medium"
+                    >
+                      View location on Google Maps ↗
+                    </a>
+                  )}
+                </div>
               </div>
 
               {/* Items */}

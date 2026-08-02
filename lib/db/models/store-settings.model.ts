@@ -136,7 +136,7 @@ const sizeGuideSchema = new Schema(
 const bouquetBuilderSchema = new Schema<IBouquetBuilderSettings>(
   {
     enabled: { type: Boolean, default: false },
-    minStems: { type: Number, default: 5, min: 1 },
+    minStems: { type: Number, default: 1, min: 1 },
     maxStems: { type: Number, default: 100, min: 1 },
     basePriceMinor: {
       type: Number,

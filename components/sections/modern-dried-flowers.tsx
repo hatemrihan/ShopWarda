@@ -1,7 +1,6 @@
 'use client';
 
 import { useRef } from 'react';
-import Image from 'next/image';
 
 export function ModernDriedFlowersSection() {
   const sectionRef = useRef<HTMLDivElement>(null);
@@ -9,11 +8,11 @@ export function ModernDriedFlowersSection() {
   return (
     <section
       ref={sectionRef}
-      className="relative bg-white overflow-hidden py-20 md:py-32"
+      className="relative bg-white overflow-hidden py-12 md:py-20"
     >
       <div className="max-w-[1400px] mx-auto px-6 md:px-10">
         {/* Giant Title */}
-        <div className="mb-16 md:mb-20">
+        <div className="mb-8 md:mb-12">
           <h2
             className="text-[clamp(2.8rem,7vw,6.5rem)] leading-[0.95] tracking-[-0.02em] text-[#1a1a1a] font-normal"
             style={{ fontFamily: 'var(--font-playfair), Georgia, serif' }}
@@ -25,29 +24,17 @@ export function ModernDriedFlowersSection() {
 
         {/* Content Grid: Image Left, Text Right */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-20 items-start">
-          {/* Left — Images */}
-          <div className="relative">
-            {/* Main Image */}
-            <div className="relative aspect-[3/4] max-w-[420px] overflow-hidden">
-              <Image
-                src="/images/one.png"
-                alt="Dried flower sculpture arrangement"
-                fill
-                sizes="(max-width: 1024px) 100vw, 42vw"
-                className="object-contain"
-              />
-            </div>
-
-            {/* Secondary floating image — offset below and right */}
-            <div className="absolute -bottom-12 right-0 md:-right-8 w-[55%] aspect-[4/5] overflow-hidden hidden md:block">
-              <Image
-                src="/images/two.png"
-                alt="Detailed dried flower arrangement"
-                fill
-                sizes="25vw"
-                className="object-contain"
-              />
-            </div>
+          {/* Left — Video */}
+          <div className="relative w-full max-w-[360px] overflow-hidden rounded-xl">
+            <video
+              src="/videos/wow.mp4"
+              autoPlay
+              loop
+              muted
+              playsInline
+              preload="auto"
+              className="w-full h-auto object-cover rounded-xl"
+            />
           </div>
 
           {/* Right — Description */}

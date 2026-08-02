@@ -27,11 +27,12 @@ export function captureException(
 
   if (!isEnabled()) return;
 
-  import('@sentry/nextjs')
-    .then((Sentry) => {
-      Sentry.captureException(error, { extra: context });
-    })
-    .catch(() => {
-      /* reporting is best effort */
-    });
+  try {
+    // Use require so the bundler doesn't fail when @sentry/nextjs is absent.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Sentry = require('@sentry/nextjs');
+    Sentry.captureException(error, { extra: context });
+  } catch {
+    /* reporting is best effort — package may not be installed */
+  }
 }

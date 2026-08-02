@@ -9,6 +9,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Plus, Trash2, Flower2, Package, Settings2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { MediaGalleryUpload, type MediaFile } from '@/components/admin/media-gallery-upload';
 
 import type { FlowerDTO, WrapDTO, BouquetSettingsDTO, FlowerColorDTO } from '@/features/bouquet/types';
 import { BOUQUET_SEASONS, type BouquetSeason, BOUQUET_STATUS, type BouquetStatus } from '@/features/bouquet/constants';
@@ -63,7 +64,7 @@ type FlowerDraft = {
   colors: FlowerColorDTO[];
   seasons: BouquetSeason[];
   available: boolean;
-  imageUrl: string;
+  media: MediaFile[];
   sortOrder: number;
   status: BouquetStatus;
 };
@@ -74,7 +75,7 @@ type WrapDraft = {
   nameAr: string;
   material: string;
   priceEgp: number;
-  imageUrl: string;
+  media: MediaFile[];
   swatchHex: string;
   available: boolean;
   sortOrder: number;
@@ -83,11 +84,11 @@ type WrapDraft = {
 
 const EMPTY_FLOWER: FlowerDraft = {
   name: '', nameAr: '', pricePerStemEgp: 0, colors: [], seasons: [],
-  available: true, imageUrl: '', sortOrder: 0, status: 'draft',
+  available: true, media: [], sortOrder: 0, status: 'draft',
 };
 
 const EMPTY_WRAP: WrapDraft = {
-  name: '', nameAr: '', material: 'paper', priceEgp: 0, imageUrl: '',
+  name: '', nameAr: '', material: 'paper', priceEgp: 0, media: [],
   swatchHex: '', available: true, sortOrder: 0, status: 'draft',
 };
 
@@ -121,7 +122,7 @@ export function BouquetManager({ initialFlowers, initialWraps, initialSettings }
       colors: f.colors,
       seasons: f.seasons,
       available: f.available,
-      imageUrl: f.imageUrl ?? '',
+      media: f.media.map((m) => ({ assetKey: m.publicUrl, url: m.publicUrl, alt: m.alt ?? '', type: 'image' as const })),
       sortOrder: f.sortOrder,
       status: f.status,
     });
@@ -148,9 +149,15 @@ export function BouquetManager({ initialFlowers, initialWraps, initialSettings }
       })),
       seasons: flowerDraft.seasons,
       available: flowerDraft.available,
-      media: flowerDraft.imageUrl
-        ? [{ assetKey: flowerDraft.imageUrl, publicUrl: flowerDraft.imageUrl, alt: flowerDraft.name, type: 'image' as const, width: 0, height: 0, sortOrder: 0 }]
-        : [],
+      media: flowerDraft.media.map((m, i) => ({
+        assetKey: m.assetKey,
+        publicUrl: m.url,
+        alt: m.alt || flowerDraft.name,
+        type: m.type ?? 'image' as const,
+        width: m.width ?? 0,
+        height: m.height ?? 0,
+        sortOrder: i,
+      })),
       sortOrder: flowerDraft.sortOrder,
       status: flowerDraft.status,
     };
@@ -200,7 +207,7 @@ export function BouquetManager({ initialFlowers, initialWraps, initialSettings }
       nameAr: w.nameAr ?? '',
       material: w.material,
       priceEgp: minorToEgp(w.priceMinor),
-      imageUrl: w.imageUrl ?? '',
+      media: w.imageUrl ? [{ assetKey: w.imageUrl, url: w.imageUrl, alt: w.name, type: 'image' as const }] : [],
       swatchHex: w.swatchHex ?? '',
       available: w.available,
       sortOrder: w.sortOrder,
@@ -219,7 +226,7 @@ export function BouquetManager({ initialFlowers, initialWraps, initialSettings }
       nameAr: wrapDraft.nameAr.trim() || undefined,
       material: wrapDraft.material.trim() || 'paper',
       priceMinor: egpToMinor(wrapDraft.priceEgp),
-      imageUrl: wrapDraft.imageUrl || '',
+      imageUrl: wrapDraft.media[0]?.url || '',
       swatchHex: wrapDraft.swatchHex || '',
       available: wrapDraft.available,
       sortOrder: wrapDraft.sortOrder,
@@ -458,12 +465,11 @@ export function BouquetManager({ initialFlowers, initialWraps, initialSettings }
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <InputLabel>Image URL</InputLabel>
-                  <input
-                    className={inputClass}
-                    value={flowerDraft.imageUrl}
-                    onChange={(e) => setFlowerDraft({ ...flowerDraft, imageUrl: e.target.value })}
-                    placeholder="https://…"
+                  <InputLabel>Image</InputLabel>
+                  <MediaGalleryUpload
+                    value={flowerDraft.media}
+                    onChange={(files) => setFlowerDraft({ ...flowerDraft, media: files })}
+                    maxFiles={1}
                   />
                 </div>
               </div>
@@ -747,12 +753,11 @@ export function BouquetManager({ initialFlowers, initialWraps, initialSettings }
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <InputLabel>Image URL</InputLabel>
-                  <input
-                    className={inputClass}
-                    value={wrapDraft.imageUrl}
-                    onChange={(e) => setWrapDraft({ ...wrapDraft, imageUrl: e.target.value })}
-                    placeholder="https://…"
+                  <InputLabel>Image</InputLabel>
+                  <MediaGalleryUpload
+                    value={wrapDraft.media}
+                    onChange={(files) => setWrapDraft({ ...wrapDraft, media: files })}
+                    maxFiles={1}
                   />
                 </div>
                 <div>

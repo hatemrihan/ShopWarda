@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ShoppingBag, Menu, X, Search } from 'lucide-react';
@@ -16,6 +17,7 @@ type SearchResult = {
 };
 
 export function SiteHeader() {
+  const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   // The bouquet builder ships behind an admin flag; don't advertise a 404.
   const [bouquetEnabled, setBouquetEnabled] = useState(false);
@@ -141,23 +143,27 @@ export function SiteHeader() {
     }, 300);
   }, []);
 
+  const isHomePage = pathname === '/';
+  // Always use dark style — hero has a light background
+  const isTransparentHeader = false;
+
+  // Always dark nav text & icons
+  const iconColor = 'text-[#1a1a1a]';
+  const iconHover = 'hover:bg-[#1a1a1a]/[0.06]';
+  const navLinkColor = 'text-[#1a1a1a]/70 hover:text-[#1a1a1a]';
+  const underlineColor = 'bg-[#1a1a1a]';
+
   return (
     <>
       <header
-        className={`
-          fixed top-0 left-0 right-0 z-50 transition-all duration-500
-          ${scrolled
-            ? 'bg-white/95 backdrop-blur-md shadow-[0_1px_0_rgba(0,0,0,0.04)]'
-            : 'bg-transparent'
-          }
-        `}
+        className="fixed top-0 left-0 right-0 z-50 transition-all duration-500 bg-transparent"
       >
         <div className="max-w-[1400px] mx-auto px-6 md:px-10">
           <div className="flex items-center justify-between h-20 md:h-24">
             {/* Logo */}
             <Link href="/" className="flex items-center group">
               <Image
-                src="/images/logo-black.png"
+                src={isTransparentHeader ? '/images/logo.png' : '/images/logo-black.png'}
                 alt="Warda"
                 width={200}
                 height={80}
@@ -171,17 +177,19 @@ export function SiteHeader() {
               {[
                 { label: 'Shop', href: '/shop' },
                 { label: 'Categories', href: '/categories' },
-                ...(bouquetEnabled ? [{ label: 'Build a Bouquet', href: '/bouquet' }] : []),
+                ...(bouquetEnabled ? [
+                  { label: 'Build a Bouquet', href: '/bouquet' },
+                ] : []),
                 { label: 'About', href: '/about' },
                 { label: 'Contact', href: '/contact' },
               ].map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="text-[12px] tracking-[0.15em] uppercase text-[#1a1a1a]/60 hover:text-[#1a1a1a] transition-colors duration-300 relative group"
+                  className={`text-[12px] tracking-[0.15em] uppercase ${navLinkColor} transition-colors duration-300 relative group`}
                 >
                   {item.label}
-                  <span className="absolute -bottom-1 left-0 w-0 h-[1px] bg-[#c75c3a] group-hover:w-full transition-all duration-300" />
+                  <span className={`absolute -bottom-1 left-0 w-0 h-[1px] ${underlineColor} group-hover:w-full transition-all duration-300`} />
                 </Link>
               ))}
             </nav>
@@ -193,10 +201,10 @@ export function SiteHeader() {
                 <button
                   type="button"
                   onClick={toggleSearch}
-                  className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-[#1a1a1a]/[0.04] transition-colors duration-200 cursor-pointer"
+                  className={`flex items-center justify-center w-9 h-9 rounded-full ${iconHover} transition-colors duration-200 cursor-pointer`}
                   aria-label="Search products"
                 >
-                  <Search className="h-[16px] w-[16px] text-[#1a1a1a]/50" strokeWidth={1.5} />
+                  <Search className={`h-[16px] w-[16px] ${iconColor}`} strokeWidth={1.5} />
                 </button>
 
                 {/* Search Dropdown */}
@@ -298,18 +306,18 @@ export function SiteHeader() {
                 ref={mobileBtnRef}
                 type="button"
                 onClick={toggleSearch}
-                className="md:hidden flex items-center justify-center w-9 h-9 rounded-full hover:bg-[#1a1a1a]/[0.04] transition-colors duration-200 cursor-pointer"
+                className={`md:hidden flex items-center justify-center w-9 h-9 rounded-full ${iconHover} transition-colors duration-200 cursor-pointer`}
                 aria-label="Search products"
               >
-                <Search className="h-[16px] w-[16px] text-[#1a1a1a]/50" strokeWidth={1.5} />
+                <Search className={`h-[16px] w-[16px] ${iconColor}`} strokeWidth={1.5} />
               </button>
 
               <button
                 onClick={openCart}
-                className="relative flex items-center justify-center w-9 h-9 rounded-full hover:bg-[#1a1a1a]/[0.04] transition-colors duration-200 cursor-pointer"
+                className={`relative flex items-center justify-center w-9 h-9 rounded-full ${iconHover} transition-colors duration-200 cursor-pointer`}
                 aria-label="Shopping bag"
               >
-                <ShoppingBag className="h-[16px] w-[16px] text-[#1a1a1a]/50" strokeWidth={1.5} />
+                <ShoppingBag className={`h-[16px] w-[16px] ${iconColor}`} strokeWidth={1.5} />
                 {cartState.itemCount > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#c75c3a] text-[#ffffff] text-[10px] font-bold flex items-center justify-center">
                     {cartState.itemCount}
@@ -317,10 +325,15 @@ export function SiteHeader() {
                 )}
               </button>
               <button
-                onClick={() => setMobileOpen(true)}
-                className="md:hidden flex items-center justify-center w-9 h-9 rounded-full hover:bg-[#1a1a1a]/[0.04] transition-colors duration-200 cursor-pointer"
+                onClick={() => setMobileOpen((v) => !v)}
+                className={`md:hidden flex items-center justify-center w-9 h-9 rounded-full ${iconHover} transition-colors duration-200 cursor-pointer`}
+                aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
               >
-                <Menu className="h-[18px] w-[18px] text-[#1a1a1a]/70" strokeWidth={1.5} />
+                {mobileOpen ? (
+                  <X className="h-[18px] w-[18px] text-[#1a1a1a]/70" strokeWidth={1.5} />
+                ) : (
+                  <Menu className="h-[18px] w-[18px] text-[#1a1a1a]/70" strokeWidth={1.5} />
+                )}
               </button>
             </div>
           </div>
@@ -420,50 +433,68 @@ export function SiteHeader() {
         )}
       </header>
 
-      {/* Mobile Menu Overlay */}
+      {/* Mobile Menu — Bloom & Wolf style dropdown */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-[55] md:hidden"
+          onClick={() => setMobileOpen(false)}
+        >
+          {/* Dim backdrop */}
+          <div className="absolute inset-0 bg-black/20" />
+        </div>
+      )}
       <div
         className={`
-          fixed inset-0 z-[60] bg-white transition-all duration-500
-          ${mobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
+          fixed top-[80px] left-0 right-0 z-[56] md:hidden
+          bg-white shadow-xl border-t border-neutral-200/60
+          transition-all duration-300 ease-in-out origin-top
+          ${mobileOpen
+            ? 'opacity-100 translate-y-0 pointer-events-auto'
+            : 'opacity-0 -translate-y-3 pointer-events-none'
+          }
         `}
       >
-        <div className="flex items-center justify-between px-6 h-16">
-          <Link href="/" className="flex items-center" onClick={() => setMobileOpen(false)}>
-            <Image
-              src="/images/logo-black.png"
-              alt="Warda"
-              width={200}
-              height={80}
-              className="w-[120px] h-auto object-contain"
-            />
-          </Link>
-          <button
-            onClick={() => setMobileOpen(false)}
-            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#1a1a1a]/[0.04]"
-          >
-            <X className="h-5 w-5 text-[#1a1a1a]/60" />
-          </button>
-        </div>
-
-        <nav className="flex flex-col items-center justify-center gap-8 pt-16">
+        <nav className="py-4 max-h-[calc(100vh-80px)] overflow-y-auto">
+          {/* Primary links */}
           {[
             { label: 'Shop', href: '/shop' },
             { label: 'Categories', href: '/categories' },
-            ...(bouquetEnabled ? [{ label: 'Build a Bouquet', href: '/bouquet' }] : []),
-            { label: 'About', href: '/about' },
-            { label: 'Contact', href: '/contact' },
-            { label: 'Cart', href: '/cart' },
-          ].map((item, i) => (
+            ...(bouquetEnabled ? [
+              { label: 'Build a Bouquet', href: '/bouquet' },
+            ] : []),
+          ].map((item) => (
             <Link
               key={item.href}
               href={item.href}
               onClick={() => setMobileOpen(false)}
-              className="text-[28px] font-light tracking-[0.08em] text-[#1a1a1a]/80 hover:text-[#c75c3a] transition-all duration-300"
-              style={{
-                transform: mobileOpen ? 'translateY(0)' : 'translateY(20px)',
-                opacity: mobileOpen ? 1 : 0,
-                transitionDelay: `${i * 80}ms`,
-              }}
+              className={`
+                block px-6 py-3.5 text-[15px] font-medium text-[#1a1a1a]
+                active:bg-neutral-50 transition-colors
+                ${pathname === item.href ? 'text-[#c75c3a]' : ''}
+              `}
+            >
+              {item.label}
+            </Link>
+          ))}
+
+          {/* Separator */}
+          <div className="my-3 mx-6 border-t border-neutral-100" />
+
+          {/* Secondary links */}
+          {[
+            { label: 'About', href: '/about' },
+            { label: 'Contact', href: '/contact' },
+            { label: 'Cart', href: '/cart' },
+          ].map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setMobileOpen(false)}
+              className={`
+                block px-6 py-3 text-[14px] text-[#1a1a1a]/60 font-normal
+                active:bg-neutral-50 transition-colors
+                ${pathname === item.href ? 'text-[#c75c3a]' : ''}
+              `}
             >
               {item.label}
             </Link>

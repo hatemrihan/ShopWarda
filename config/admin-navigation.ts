@@ -7,7 +7,6 @@ import {
   Package,
   FolderTree,
   Flower2,
-  Gift,
   ShoppingCart,
   Tag,
   MessageSquare,
@@ -43,7 +42,6 @@ export const adminNavGroups: AdminNavGroup[] = [
       { label: 'Products', href: '/admin/products', icon: Package },
       { label: 'Categories', href: '/admin/categories', icon: FolderTree },
       { label: 'Bouquet Builder', href: '/admin/bouquet', icon: Flower2 },
-      { label: 'Wrapping Paper', href: '/admin/wrapping-paper', icon: Gift },
     ],
   },
   {

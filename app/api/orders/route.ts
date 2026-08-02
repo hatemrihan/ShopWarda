@@ -8,6 +8,7 @@ import { RateLimitError, ValidationError } from '@/lib/errors';
 import { ORDER_STATUS } from '@/lib/db/types';
 import { orderService, type PlaceOrderInput } from '@/features/checkout/server/order.service';
 import { captureException } from '@/lib/observability';
+import { generatePresignedReadUrl } from '@/lib/storage/provider';
 
 /**
  * POST /api/orders
@@ -150,8 +151,8 @@ interface OrderRaw {
   payment?: { method?: string; status?: string; instaPayAssetKey?: string; instaPayMime?: string };
   paymentMethod?: string;
   paymentStatus?: string;
-  address?: { street?: string; building?: string; city?: string; governorate?: string; lat?: number; lng?: number };
-  shippingAddress?: { street?: string; building?: string; city?: string; governorate?: string; lat?: number; lng?: number };
+  address?: { street?: string; building?: string; city?: string; governorate?: string; area?: string; floor?: string; apartment?: string; landmark?: string; lat?: number; lng?: number };
+  shippingAddress?: { street?: string; building?: string; city?: string; governorate?: string; area?: string; floor?: string; apartment?: string; landmark?: string; lat?: number; lng?: number };
   governorate?: string;
   customerNote?: string;
   customerNotes?: string;
@@ -160,23 +161,11 @@ interface OrderRaw {
 }
 
 /**
- * Build a URL for an InstaPay proof from the *configured* storage, rather than
- * the hardcoded bucket of an unrelated project that used to be here.
- *
- * Note: proofs live in the private bucket, so this URL is not publicly
- * readable — rendering it in admin needs a presigned read
- * (`generatePresignedReadUrl`). Deferred until this route is behind
- * `requireAdmin()`, so we don't hand out working proof links on a public
- * endpoint in the meantime.
+ * Build a presigned read URL for an InstaPay proof stored in the private bucket.
+ * Returns a time-limited signed URL (1 hour) that the admin can use to view the image.
  */
-function buildProofUrl(assetKey: string): string {
-  const cdnUrl = process.env.CLOUDFRONT_URL;
-  if (cdnUrl) return `${cdnUrl.replace(/\/$/, '')}/${assetKey}`;
-
-  const bucket =
-    process.env.S3_BUCKET_PRIVATE || process.env.S3_BUCKET_PUBLIC || 'shopwarda-media';
-  const region = process.env.AWS_REGION || 'us-east-1';
-  return `https://${bucket}.s3.${region}.amazonaws.com/${assetKey}`;
+async function buildProofUrl(assetKey: string): Promise<string> {
+  return generatePresignedReadUrl(assetKey, 3600);
 }
 
 /**
@@ -209,46 +198,67 @@ export async function GET(req: NextRequest) {
       Order.countDocuments(query),
     ]);
 
-    const formatted = orders.map((o: OrderRaw) => ({
-      id: o._id.toString(),
-      order_number: o.orderNumber,
-      customer_name: o.guest?.name || o.guestName || o.customer?.name || 'Guest',
-      customer_email: o.guest?.email || o.guestEmail || o.customer?.email || null,
-      customer_phone: o.guest?.phone || o.guestPhone || o.customer?.phone || null,
-      items: (o.items || []).map((i: OrderItemRaw) => ({
-        productId: i.sourceProductId?.toString() || '',
-        name: i.productName,
-        price: (i.unitPriceMinor || 0) / 100,
-        quantity: i.quantity,
-        size: i.selectedOptions?.find((opt: OrderOption) => opt.label?.toLowerCase() === 'size')?.value,
-        color: i.selectedOptions?.find((opt: OrderOption) => opt.label?.toLowerCase() === 'color')?.value,
-        attributes: i.selectedOptions && i.selectedOptions.length > 0
-          ? Object.fromEntries(i.selectedOptions.map((opt: OrderOption) => [opt.label, opt.value]))
-          : undefined,
-        image: i.imageUrl,
-      })),
-      subtotal: ((o.pricing?.subtotalMinor ?? o.subtotalPiasters) || 0) / 100,
-      shipping_cost: ((o.pricing?.shippingMinor ?? o.shippingFeePiasters) || 0) / 100,
-      cod_fee: ((o.pricing?.codFeePiasters ?? o.codFeePiasters) || 0) / 100,
-      total: ((o.pricing?.totalMinor ?? o.totalPiasters) || 0) / 100,
-      currency: 'EGP',
-      status: o.status || 'pending',
-      payment_method: (o.payment?.method || o.paymentMethod) === 'cod' ? 'cashOnDelivery' : (o.payment?.method || o.paymentMethod),
-      payment_status: o.payment?.status || o.paymentStatus || 'pending',
-      payment_screenshot: o.payment?.instaPayAssetKey
-        ? (o.payment.instaPayAssetKey.startsWith('http')
-            ? o.payment.instaPayAssetKey
-            : buildProofUrl(o.payment.instaPayAssetKey))
-        : null,
-      shipping_address: {
-        address: (o.address?.street || o.shippingAddress?.street) ? `${o.address?.street || o.shippingAddress?.street}${ (o.address?.building || o.shippingAddress?.building) ? `, Bldg ${o.address?.building || o.shippingAddress?.building}` : ''}` : '',
-        city: o.address?.city || o.shippingAddress?.city || '',
-        lat: o.address?.lat || o.shippingAddress?.lat,
-        lng: o.address?.lng || o.shippingAddress?.lng,
-      },
-      governorate: o.address?.governorate || o.governorate || o.shippingAddress?.governorate || '',
-      notes: o.customerNote || o.customerNotes || o.deliveryNotes || '',
-      created_at: o.createdAt,
+    const formatted = await Promise.all(orders.map(async (o: OrderRaw) => {
+      // Generate presigned URL for payment proof if it exists and is an S3 key
+      let paymentScreenshot: string | null = null;
+      if (o.payment?.instaPayAssetKey) {
+        if (o.payment.instaPayAssetKey.startsWith('http')) {
+          paymentScreenshot = o.payment.instaPayAssetKey;
+        } else {
+          try {
+            paymentScreenshot = await buildProofUrl(o.payment.instaPayAssetKey);
+          } catch (err) {
+            console.warn(`[orders] Failed to sign proof for ${o.orderNumber}:`, err);
+            paymentScreenshot = null;
+          }
+        }
+      }
+
+      return {
+        id: o._id.toString(),
+        order_number: o.orderNumber,
+        customer_name: o.guest?.name || o.guestName || o.customer?.name || 'Guest',
+        customer_email: o.guest?.email || o.guestEmail || o.customer?.email || null,
+        customer_phone: o.guest?.phone || o.guestPhone || o.customer?.phone || null,
+        items: (o.items || []).map((i: OrderItemRaw) => ({
+          productId: i.sourceProductId?.toString() || '',
+          name: i.productName,
+          price: (i.unitPriceMinor || 0) / 100,
+          quantity: i.quantity,
+          size: i.selectedOptions?.find((opt: OrderOption) => opt.label?.toLowerCase() === 'size')?.value,
+          color: i.selectedOptions?.find((opt: OrderOption) => opt.label?.toLowerCase() === 'color')?.value,
+          attributes: i.selectedOptions && i.selectedOptions.length > 0
+            ? Object.fromEntries(i.selectedOptions.map((opt: OrderOption) => [opt.label, opt.value]))
+            : undefined,
+          image: i.imageUrl,
+        })),
+        subtotal: ((o.pricing?.subtotalMinor ?? o.subtotalPiasters) || 0) / 100,
+        shipping_cost: ((o.pricing?.shippingMinor ?? o.shippingFeePiasters) || 0) / 100,
+        cod_fee: ((o.pricing?.codFeePiasters ?? o.codFeePiasters) || 0) / 100,
+        total: ((o.pricing?.totalMinor ?? o.totalPiasters) || 0) / 100,
+        currency: 'EGP',
+        status: o.status || 'pending',
+        payment_method: (o.payment?.method || o.paymentMethod) === 'cod' ? 'cashOnDelivery' : (o.payment?.method || o.paymentMethod),
+        payment_status: o.payment?.status || o.paymentStatus || 'pending',
+        payment_screenshot: paymentScreenshot,
+        shipping_address: {
+          address: [
+            o.address?.street || o.shippingAddress?.street,
+            (o.address?.building || o.shippingAddress?.building) ? `Bldg ${o.address?.building || o.shippingAddress?.building}` : null,
+            (o.address?.floor || o.shippingAddress?.floor) ? `Floor ${o.address?.floor || o.shippingAddress?.floor}` : null,
+            (o.address?.apartment || o.shippingAddress?.apartment) ? `Apt ${o.address?.apartment || o.shippingAddress?.apartment}` : null,
+          ].filter(Boolean).join(', ') || '',
+          area: o.address?.area || o.shippingAddress?.area || '',
+          city: o.address?.city || o.shippingAddress?.city || '',
+          landmark: o.address?.landmark || o.shippingAddress?.landmark || '',
+          lat: o.address?.lat || o.shippingAddress?.lat,
+          lng: o.address?.lng || o.shippingAddress?.lng,
+        },
+        governorate: o.address?.governorate || o.governorate || o.shippingAddress?.governorate || '',
+        notes: o.customerNote || o.customerNotes || o.deliveryNotes || '',
+        delivery_notes: o.deliveryNotes || '',
+        created_at: o.createdAt,
+      };
     }));
 
     return NextResponse.json({

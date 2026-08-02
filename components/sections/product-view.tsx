@@ -455,12 +455,14 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
         {/* Complete the Look / Related Section */}
         {relatedProducts.length > 0 && (
           <section className="py-16 border-t border-gray-200 mt-16">
-            <h2 className="text-xl lg:text-2xl font-light text-black mb-12 uppercase tracking-wider font-[family-name:var(--font-playfair)]">
+            <h2 className="text-xl lg:text-2xl font-light text-black mb-8 uppercase tracking-wider font-[family-name:var(--font-playfair)]">
               More From This Collection
             </h2>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
+            <div className="flex gap-6 lg:gap-8 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-none touch-pan-x scroll-smooth -mx-6 px-6 lg:mx-0 lg:px-0">
               {relatedProducts.map((relatedProduct) => (
-                <ProductCard key={relatedProduct.id} product={relatedProduct} />
+                <div key={relatedProduct.id} className="w-[220px] sm:w-[250px] lg:w-[270px] shrink-0 snap-start">
+                  <ProductCard product={relatedProduct} />
+                </div>
               ))}
             </div>
           </section>

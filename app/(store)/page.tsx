@@ -3,17 +3,24 @@ import { categoryService } from '@/features/catalog/server/category.service';
 import { productService } from '@/features/catalog/server/product.service';
 import { ProductCard } from '@/components/sections/product-card';
 import { HeroSection } from '@/components/sections/hero';
-import { ModernDriedFlowersSection } from '@/components/sections/modern-dried-flowers';
 import { CategoryShowcaseSection } from '@/components/sections/category-showcase';
+import { BouquetShowcase } from '@/components/sections/bouqet';
+import { getActiveCatalog } from '@/features/bouquet/server/bouquet.service';
 
 export default async function HomePage() {
-  const [categories, products] = await Promise.all([
+  const [categories, products, bouquetCatalog] = await Promise.all([
     categoryService.listCached({ status: 'active' }),
     productService.listCached(
       { status: 'active', sortBy: 'createdAt', sortOrder: 'desc' },
       { page: 1, pageSize: 8 }
     ),
+    getActiveCatalog().catch(() => null),
   ]);
+
+  const showBouquet =
+    bouquetCatalog &&
+    bouquetCatalog.settings.enabled &&
+    (bouquetCatalog.flowers.length > 0 || bouquetCatalog.wraps.length > 0);
 
   return (
     <div>
@@ -21,12 +28,8 @@ export default async function HomePage() {
       <HeroSection />
 
 
-      {/* Advertisement */}
-      <ModernDriedFlowersSection />
-
       {/* Category Showcase — dynamic from admin categories */}
       <CategoryShowcaseSection categories={categories} />
-
 
       {/* New Arrivals */}
       {products.items.length > 0 && (
@@ -47,13 +50,28 @@ export default async function HomePage() {
               Shop all →
             </Link>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="flex gap-6 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-none touch-pan-x scroll-smooth -mx-6 px-6 md:-mx-10 md:px-10">
             {products.items.map((product) => (
-              <ProductCard key={product.id} product={product} />
+              <div key={product.id} className="w-[240px] sm:w-[280px] md:w-[300px] shrink-0 snap-start">
+                <ProductCard product={product} />
+              </div>
             ))}
           </div>
         </section>
       )}
+
+      {/* Bouquet Showcase — only when enabled in admin */}
+      {showBouquet && (
+        <BouquetShowcase
+          flowers={bouquetCatalog.flowers}
+          wraps={bouquetCatalog.wraps}
+          settings={bouquetCatalog.settings}
+        />
+      )}
+
+      {/* Advertisement */}
+      {/* <ModernDriedFlowersSection /> */}
     </div>
   );
 }
+
