@@ -84,12 +84,12 @@ type WrapDraft = {
 
 const EMPTY_FLOWER: FlowerDraft = {
   name: '', nameAr: '', pricePerStemEgp: 0, colors: [], seasons: [],
-  available: true, media: [], sortOrder: 0, status: 'draft',
+  available: true, media: [], sortOrder: 0, status: 'active',
 };
 
 const EMPTY_WRAP: WrapDraft = {
   name: '', nameAr: '', material: 'paper', priceEgp: 0, media: [],
-  swatchHex: '', available: true, sortOrder: 0, status: 'draft',
+  swatchHex: '', available: true, sortOrder: 0, status: 'active',
 };
 
 // ── Component ─────────────────────────────────────────────────

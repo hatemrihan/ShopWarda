@@ -116,7 +116,7 @@ export function SiteFooter() {
             </ul>
 
             <div className="flex items-center gap-4 mt-8 text-white">
-              <Link href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-75 transition-opacity" aria-label="Instagram">
+              <Link href="https://www.instagram.com/wardatheflorist?igsh=Z25zcWtia2kzbGM2" target="_blank" rel="noopener noreferrer" className="hover:opacity-75 transition-opacity" aria-label="Instagram">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
                   <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
                   <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />

@@ -40,7 +40,7 @@ export const flowerInputSchema = z.object({
   available: z.boolean().default(true),
   media: z.array(mediaSchema).default([]),
   sortOrder: z.number().int().min(0).default(0),
-  status: z.enum(BOUQUET_STATUS).default('draft'),
+  status: z.enum(BOUQUET_STATUS).default('active'),
 });
 
 export const wrapInputSchema = z.object({
@@ -52,7 +52,7 @@ export const wrapInputSchema = z.object({
   swatchHex: hexColor.optional().or(z.literal('')),
   available: z.boolean().default(true),
   sortOrder: z.number().int().min(0).default(0),
-  status: z.enum(BOUQUET_STATUS).default('draft'),
+  status: z.enum(BOUQUET_STATUS).default('active'),
 });
 
 export const bouquetSettingsSchema = z.object({
