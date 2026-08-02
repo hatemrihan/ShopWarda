@@ -7,6 +7,9 @@ import { CategoryShowcaseSection } from '@/components/sections/category-showcase
 import { BouquetShowcase } from '@/components/sections/bouqet';
 import { getActiveCatalog } from '@/features/bouquet/server/bouquet.service';
 
+/** Re-render the homepage at most every 60 s so bouquet/settings changes appear. */
+export const revalidate = 60;
+
 export default async function HomePage() {
   const [categories, products, bouquetCatalog] = await Promise.all([
     categoryService.listCached({ status: 'active' }),
@@ -14,7 +17,10 @@ export default async function HomePage() {
       { status: 'active', sortBy: 'createdAt', sortOrder: 'desc' },
       { page: 1, pageSize: 8 }
     ),
-    getActiveCatalog().catch(() => null),
+    getActiveCatalog().catch((err) => {
+      console.error('[HomePage] Failed to load bouquet catalog:', err);
+      return null;
+    }),
   ]);
 
   const showBouquet =
