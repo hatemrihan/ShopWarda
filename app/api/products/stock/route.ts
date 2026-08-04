@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import connectDB from '@/lib/db/mongoose';
 import { Product } from '@/lib/db/models/product.model';
 import type { IVariant } from '@/lib/db/types';
@@ -13,6 +14,30 @@ export async function GET(req: NextRequest) {
   if (!productId) {
     return NextResponse.json(
       { success: false, error: 'Product ID required' },
+      { status: 400 },
+    );
+  }
+
+  if (productId.startsWith('bouquet:')) {
+    return NextResponse.json({
+      success: true,
+      productId,
+      productName: 'Custom Bouquet',
+      productStatus: 'active',
+      variants: [
+        {
+          variantId: productId,
+          sku: 'BOUQUET',
+          stock: 999,
+          available: true,
+        },
+      ],
+    });
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(productId)) {
+    return NextResponse.json(
+      { success: false, error: 'Invalid product ID' },
       { status: 400 },
     );
   }
