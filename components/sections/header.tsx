@@ -375,7 +375,7 @@ export function SiteHeader() {
                   value={searchQuery}
                   onChange={(e) => handleSearch(e.target.value)}
                   placeholder="Search products..."
-                  className="w-full text-base text-neutral-900 placeholder:text-neutral-400 outline-none bg-transparent"
+                  className="w-full text-xs text-neutral-900 placeholder:text-neutral-400 outline-none bg-transparent"
                 />
                 <button
                   type="button"
