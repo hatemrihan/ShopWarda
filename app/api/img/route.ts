@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import sharp from 'sharp';
 import { getCdnUrl, getPublicBucket } from '@/lib/storage/aws';
 import { snapWidth } from '@/lib/images/widths';
 
@@ -15,6 +14,38 @@ import { snapWidth } from '@/lib/images/widths';
  */
 
 export const runtime = 'nodejs';
+
+type Sharp = typeof import('sharp').default;
+
+/**
+ * sharp is a native module. It is loaded on first use rather than at import
+ * time: a static import that fails to load (as it did on Vercel when libvips
+ * was missing from the bundle) crashes the whole route with a 500 before any
+ * of our code runs — every photo on the site then disappears. Loaded lazily,
+ * a failure is caught and the original image is served instead.
+ */
+let sharpModule: Promise<Sharp | null> | null = null;
+
+function loadSharp(): Promise<Sharp | null> {
+  sharpModule ??= import('sharp')
+    .then((mod) => (mod as unknown as { default?: Sharp }).default ?? (mod as unknown as Sharp))
+    .catch((error) => {
+      console.error('[GET /api/img] sharp unavailable — serving original images', error);
+      return null;
+    });
+  return sharpModule;
+}
+
+/**
+ * Send the browser straight to the original photo. Short cache, so the
+ * resized version takes over again as soon as resizing works.
+ */
+function redirectToOriginal(source: URL): NextResponse {
+  return NextResponse.redirect(source, {
+    status: 307,
+    headers: { 'Cache-Control': 'public, max-age=300' },
+  });
+}
 
 const MAX_SOURCE_BYTES = 25 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 10_000;
@@ -70,6 +101,9 @@ export async function GET(req: NextRequest) {
   if (!isAllowedSource(source)) {
     return NextResponse.json({ error: 'Source not allowed' }, { status: 400 });
   }
+
+  const sharp = await loadSharp();
+  if (!sharp) return redirectToOriginal(source);
 
   const width = snapWidth(Math.max(1, Number(params.get('w')) || 1200));
   const quality = Math.min(90, Math.max(40, Number(params.get('q')) || 75));

@@ -11,6 +11,18 @@ const nextConfig: NextConfig = {
     deviceSizes: [...DEVICE_SIZES],
     imageSizes: [...IMAGE_SIZES],
   },
+
+  // sharp's Linux binding loads libvips from a sibling package at runtime
+  // (dlopen), which build-time file tracing cannot see. Without these files
+  // the deployed /api/img function failed every request with
+  // "libvips-cpp.so: cannot open shared object file".
+  outputFileTracingIncludes: {
+    '/api/img': [
+      './node_modules/sharp/**/*',
+      './node_modules/@img/sharp-linux-x64/**/*',
+      './node_modules/@img/sharp-libvips-linux-x64/**/*',
+    ],
+  },
 };
 
 export default nextConfig;
