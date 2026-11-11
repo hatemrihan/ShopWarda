@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Suspense } from 'react';
 import { categoryService } from '@/features/catalog/server/category.service';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -85,13 +86,16 @@ export default async function CategoriesPage({ searchParams }: Props) {
                 className="group"
               >
                 {/* Category Image */}
-                <div className="aspect-[3/4] overflow-hidden bg-neutral-100 mb-3">
+                <div className="relative aspect-[3/4] overflow-hidden bg-neutral-100 mb-3">
                   {cat.imageUrl ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
+                    // Resized by the image pipeline; this used to download the
+                    // full-size upload (often 500 KB+) for a small tile.
+                    <Image
                       src={cat.imageUrl}
                       alt={cat.name}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      fill
+                      sizes="(max-width: 768px) 50vw, 25vw"
+                      className="object-cover transition-transform duration-500 group-hover:scale-105"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-neutral-300">

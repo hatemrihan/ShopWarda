@@ -2,8 +2,11 @@
  * Cache tags and invalidation helpers.
  * Used with Next.js revalidateTag.
  *
- * Next.js 16 requires a second `profile` argument for revalidateTag.
- * We use 'default' for standard invalidation.
+ * Next.js 16 requires a second argument for revalidateTag. A named profile
+ * (we used 'default') only marks the entry *stale*: the next visitor is still
+ * served the old data while a refresh happens in the background. For a shop
+ * that meant an admin saved a price or archived a product and the storefront
+ * kept showing the old one. `{ expire: 0 }` drops the entry immediately.
  */
 
 import { revalidateTag } from 'next/cache';
@@ -20,7 +23,7 @@ export const CACHE_TAGS = {
   product: (slug: string) => `product:${slug}`,
 } as const;
 
-const PROFILE = 'default';
+const PROFILE = { expire: 0 } as const;
 
 // ─── Invalidation Helpers ───────────────────────────────────────
 
@@ -54,4 +57,5 @@ export function invalidateAll() {
   revalidateTag(CACHE_TAGS.CATEGORIES, PROFILE);
   revalidateTag(CACHE_TAGS.PRODUCTS, PROFILE);
   revalidateTag(CACHE_TAGS.SETTINGS, PROFILE);
+  revalidateTag(CACHE_TAGS.BOUQUET, PROFILE);
 }

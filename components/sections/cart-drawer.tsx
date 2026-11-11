@@ -1,6 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
+import Image from 'next/image';
 import { useCart, type CartItem } from '@/features/cart/context/cart-context';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Plus, Minus } from 'lucide-react';
@@ -37,10 +38,35 @@ export function CartDrawer() {
     router.push('/shop');
   };
 
-  const handleViewProduct = (productId: string) => {
+  // Product pages live at /product/<slug>. This used to push the database id
+  // into that slot, so every thumbnail in the bag led to a 404.
+  const handleViewProduct = (item: CartItem) => {
     closeCart();
-    router.push(`/product/${productId}`);
+    if (item.kind === 'bouquet') {
+      router.push('/bouquet');
+      return;
+    }
+    // Bags saved before slugs were stored fall back to the id, which the
+    // product page resolves and redirects.
+    router.push(`/product/${item.slug ?? item.id}`);
   };
+
+  // While the bag is open: Escape closes it and the page behind stays put.
+  useEffect(() => {
+    if (!isCartOpen) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeCart();
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isCartOpen, closeCart]);
 
   const subtotal = cartState.items.reduce((sum, item) => {
     return sum + (item.price * item.quantity);
@@ -72,6 +98,7 @@ export function CartDrawer() {
               <h2 className="text-lg font-medium text-black">Shopping Bag ({cartState.itemCount})</h2>
               <button
                 onClick={closeCart}
+                aria-label="Close shopping bag"
                 className="p-2 hover:bg-gray-100 rounded-full transition-colors"
               >
                 <X className="w-5 h-5 text-black" />
@@ -96,15 +123,18 @@ export function CartDrawer() {
                     <div key={`${item.id}-${item.variantId ?? ""}-${item.configHash ?? ""}-${JSON.stringify(item.variant)}`} className="flex gap-4">
                       {/* Product Image */}
                       <div
-                        className="w-20 h-20 bg-gray-100 overflow-hidden cursor-pointer flex-shrink-0"
-                        onClick={() => handleViewProduct(item.id)}
+                        className="relative w-20 h-20 bg-gray-100 overflow-hidden cursor-pointer flex-shrink-0"
+                        onClick={() => handleViewProduct(item)}
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={item.image}
-                          alt={item.name}
-                          className="w-full h-full object-cover"
-                        />
+                        {item.image && (
+                          <Image
+                            src={item.image}
+                            alt={item.name}
+                            fill
+                            sizes="96px"
+                            className="object-cover"
+                          />
+                        )}
                       </div>
 
                       {/* Product Details */}
@@ -139,6 +169,7 @@ export function CartDrawer() {
                             <button
                               onClick={() => handleUpdateQuantity(item, item.quantity - 1)}
                               disabled={item.quantity <= 1}
+                              aria-label={`Decrease quantity of ${item.name}`}
                               className={`w-6 h-6 border flex items-center justify-center text-xs ${
                                 item.quantity <= 1
                                   ? 'border-gray-300 text-gray-400 cursor-not-allowed'
@@ -155,6 +186,7 @@ export function CartDrawer() {
                             <button
                               onClick={() => handleUpdateQuantity(item, item.quantity + 1)}
                               disabled={item.stock !== undefined && item.quantity >= item.stock}
+                              aria-label={`Increase quantity of ${item.name}`}
                               className={`w-6 h-6 border flex items-center justify-center text-xs ${
                                 item.stock !== undefined && item.quantity >= item.stock
                                   ? 'border-gray-300 text-gray-400 cursor-not-allowed'
@@ -222,6 +254,7 @@ export function CartDrawer() {
               <h2 className="text-lg font-medium text-black">Shopping Bag ({cartState.itemCount})</h2>
               <button
                 onClick={closeCart}
+                aria-label="Close shopping bag"
                 className="p-2 hover:bg-gray-100 rounded-full transition-colors"
               >
                 <X className="w-6 h-6 text-black" />
@@ -246,15 +279,18 @@ export function CartDrawer() {
                     <div key={`${item.id}-${item.variantId ?? ""}-${item.configHash ?? ""}-${JSON.stringify(item.variant)}`} className="flex gap-4">
                       {/* Product Image */}
                       <div
-                        className="w-24 h-24 bg-gray-100 overflow-hidden cursor-pointer flex-shrink-0"
-                        onClick={() => handleViewProduct(item.id)}
+                        className="relative w-24 h-24 bg-gray-100 overflow-hidden cursor-pointer flex-shrink-0"
+                        onClick={() => handleViewProduct(item)}
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={item.image}
-                          alt={item.name}
-                          className="w-full h-full object-cover"
-                        />
+                        {item.image && (
+                          <Image
+                            src={item.image}
+                            alt={item.name}
+                            fill
+                            sizes="96px"
+                            className="object-cover"
+                          />
+                        )}
                       </div>
 
                       {/* Product Details */}
@@ -289,6 +325,7 @@ export function CartDrawer() {
                             <button
                               onClick={() => handleUpdateQuantity(item, item.quantity - 1)}
                               disabled={item.quantity <= 1}
+                              aria-label={`Decrease quantity of ${item.name}`}
                               className={`w-8 h-8 border flex items-center justify-center ${
                                 item.quantity <= 1
                                   ? 'border-gray-300 text-gray-400 cursor-not-allowed'
@@ -305,6 +342,7 @@ export function CartDrawer() {
                             <button
                               onClick={() => handleUpdateQuantity(item, item.quantity + 1)}
                               disabled={item.stock !== undefined && item.quantity >= item.stock}
+                              aria-label={`Increase quantity of ${item.name}`}
                               className={`w-8 h-8 border flex items-center justify-center ${
                                 item.stock !== undefined && item.quantity >= item.stock
                                   ? 'border-gray-300 text-gray-400 cursor-not-allowed'

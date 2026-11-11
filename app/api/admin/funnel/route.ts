@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth-options';
 import connectDB from '@/lib/db/mongoose';
 import { AnalyticsEvent } from '@/lib/db/models/analytics-event.model';
 import { Order } from '@/lib/db/models/order.model';
+import { guardAdmin } from '@/lib/auth/api-guard';
 
 // ─── GET /api/admin/funnel ────────────────────────────────────
+//
+// Everything is computed inside MongoDB. The previous version pulled every
+// event of the period into the function's memory four separate times (and
+// every order, to sum revenue), which grows without bound with traffic.
 
 const STAGE_MAPPINGS: Record<string, string[]> = {
   PageView: ['page_view', 'PageView'],
@@ -16,6 +19,25 @@ const STAGE_MAPPINGS: Record<string, string[]> = {
 };
 
 const FUNNEL_STAGES = ['PageView', 'ViewContent', 'AddToCart', 'InitiateCheckout', 'Purchase'] as const;
+type Stage = (typeof FUNNEL_STAGES)[number];
+
+/** Raw event name → canonical stage name. */
+const STAGE_OF: Record<string, Stage> = Object.fromEntries(
+  FUNNEL_STAGES.flatMap((stage) => STAGE_MAPPINGS[stage].map((alias) => [alias, stage])),
+);
+
+const ALL_ALIASES = Object.keys(STAGE_OF);
+
+/** `$switch` branches that fold event aliases into their stage. */
+const stageExpr = {
+  $switch: {
+    branches: FUNNEL_STAGES.map((stage) => ({
+      case: { $in: ['$event', STAGE_MAPPINGS[stage]] },
+      then: stage,
+    })),
+    default: '$event',
+  },
+};
 
 function parsePeriod(period: string | null): number {
   switch (period) {
@@ -29,144 +51,135 @@ function parsePeriod(period: string | null): number {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.adminId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const denied = await guardAdmin();
+  if (denied) return denied;
 
   try {
     await connectDB();
 
-    const period = req.nextUrl.searchParams.get('period');
-    const days = parsePeriod(period);
+    const days = parsePeriod(req.nextUrl.searchParams.get('period'));
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const purchaseAliases = STAGE_MAPPINGS.Purchase;
+    const cartAliases = STAGE_MAPPINGS.AddToCart;
 
-    // 1. Funnel counts — unique sessions per stage
-    const funnelPromises = FUNNEL_STAGES.map(async (stage) => {
-      const aliases = STAGE_MAPPINGS[stage] || [stage];
-      const sessions = await AnalyticsEvent.distinct('anonymousSessionId', {
-        event: { $in: aliases },
-        occurredAt: { $gte: since },
-        anonymousSessionId: { $ne: null },
-      });
-      return { stage, unique_sessions: sessions.length };
-    });
+    const [stageSessions, totalEvents, dailyAgg, abandonedAgg, revenueAgg] = await Promise.all([
+      // 1. Unique sessions per stage.
+      AnalyticsEvent.aggregate<{ _id: Stage; unique_sessions: number }>([
+        { $match: { occurredAt: { $gte: since }, event: { $in: ALL_ALIASES } } },
+        { $group: { _id: { stage: stageExpr, session: '$anonymousSessionId' } } },
+        { $group: { _id: '$_id.stage', unique_sessions: { $sum: 1 } } },
+      ]),
 
-    const funnel = await Promise.all(funnelPromises);
+      // 2. Total events.
+      AnalyticsEvent.countDocuments({ occurredAt: { $gte: since } }),
 
-    // 2. Total events count
-    const totalEvents = await AnalyticsEvent.countDocuments({
-      occurredAt: { $gte: since },
-    });
+      // 3. Events per day per stage.
+      AnalyticsEvent.aggregate<{ _id: { date: string; stage: string }; count: number }>([
+        { $match: { occurredAt: { $gte: since } } },
+        {
+          $group: {
+            _id: {
+              date: { $dateToString: { format: '%Y-%m-%d', date: '$occurredAt' } },
+              stage: stageExpr,
+            },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { '_id.date': 1 } },
+      ]),
 
-    // 3. Revenue from Purchase events or completed Orders
-    const purchaseAliases = STAGE_MAPPINGS['Purchase'];
-    const purchaseEvents = await AnalyticsEvent.find({
-      event: { $in: purchaseAliases },
-      occurredAt: { $gte: since },
-    }).lean();
+      // 4. Products added to a cart in sessions that never purchased.
+      AnalyticsEvent.aggregate<{ _id: string; name: string; count: number }>([
+        {
+          $match: {
+            occurredAt: { $gte: since },
+            event: { $in: [...cartAliases, ...purchaseAliases] },
+          },
+        },
+        {
+          $group: {
+            _id: '$anonymousSessionId',
+            purchased: { $max: { $cond: [{ $in: ['$event', purchaseAliases] }, 1, 0] } },
+            carts: {
+              $push: {
+                $cond: [
+                  { $in: ['$event', cartAliases] },
+                  {
+                    key: { $ifNull: ['$properties.productId', '$properties.content_name'] },
+                    name: {
+                      $ifNull: [
+                        '$properties.content_name',
+                        { $ifNull: ['$properties.productName', '$properties.name'] },
+                      ],
+                    },
+                  },
+                  '$$REMOVE',
+                ],
+              },
+            },
+          },
+        },
+        { $match: { purchased: 0 } },
+        { $unwind: '$carts' },
+        {
+          $group: {
+            _id: { $ifNull: ['$carts.key', 'unknown'] },
+            name: { $first: { $ifNull: ['$carts.name', 'Unknown Product'] } },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { count: -1 } },
+        { $limit: 8 },
+      ]),
 
-    let totalRevenue = purchaseEvents.reduce((sum, e) => {
-      const val = Number(e.properties?.value ?? e.properties?.total ?? 0);
-      return sum + (isNaN(val) ? 0 : val);
-    }, 0);
+      // 5. Revenue — from the orders themselves, the source of truth.
+      Order.aggregate<{ _id: null; total: number }>([
+        { $match: { createdAt: { $gte: since }, status: { $ne: 'cancelled' } } },
+        { $group: { _id: null, total: { $sum: '$pricing.totalMinor' } } },
+      ]),
+    ]);
 
-    if (totalRevenue === 0) {
-      const orders = await Order.find({ createdAt: { $gte: since } }).lean();
-      totalRevenue = orders.reduce(
-        (sum, o) => sum + (o.pricing?.totalMinor ? o.pricing.totalMinor / 100 : 0),
-        0
-      );
-    }
-
-    // 4. Top abandoned products (AddToCart but no Purchase in same session)
-    const cartAliases = STAGE_MAPPINGS['AddToCart'];
-    const cartEvents = await AnalyticsEvent.find({
-      event: { $in: cartAliases },
-      occurredAt: { $gte: since },
-    }).lean();
-
-    const purchaseSessions = await AnalyticsEvent.distinct('anonymousSessionId', {
-      event: { $in: purchaseAliases },
-      occurredAt: { $gte: since },
-    });
-
-    const purchaseSessionSet = new Set(purchaseSessions);
-    const abandonedProducts: Record<string, { name: string; count: number }> = {};
-
-    cartEvents.forEach((event) => {
-      if (!event.anonymousSessionId || purchaseSessionSet.has(event.anonymousSessionId)) return;
-      const props = event.properties || {};
-      const name =
-        (props.content_name as string) ||
-        (props.productName as string) ||
-        (props.name as string) ||
-        'Unknown Product';
-      const key = (props.productId as string) || name;
-      if (!abandonedProducts[key]) {
-        abandonedProducts[key] = { name, count: 0 };
-      }
-      abandonedProducts[key].count++;
-    });
-
-    const topAbandoned = Object.values(abandonedProducts)
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 8);
-
-    // 5. Daily event breakdown
-    const dailyEvents = await AnalyticsEvent.find({
-      occurredAt: { $gte: since },
-    })
-      .select('event occurredAt')
-      .sort({ occurredAt: 1 })
-      .lean();
-
-    const dailyMap: Record<string, Record<string, number>> = {};
-    dailyEvents.forEach((e) => {
-      const date = new Date(e.occurredAt).toISOString().split('T')[0];
-      if (!dailyMap[date]) dailyMap[date] = {};
-      const stageName =
-        Object.keys(STAGE_MAPPINGS).find((key) => STAGE_MAPPINGS[key].includes(e.event)) ||
-        e.event;
-      dailyMap[date][stageName] = (dailyMap[date][stageName] || 0) + 1;
-    });
-
-    const dailyChart = Object.entries(dailyMap).map(([date, events]) => ({
-      date,
-      pageviews: events['PageView'] || 0,
-      views: events['ViewContent'] || 0,
-      carts: events['AddToCart'] || 0,
-      checkouts: events['InitiateCheckout'] || 0,
-      purchases: events['Purchase'] || 0,
+    const sessionsByStage = new Map(stageSessions.map((s) => [s._id, s.unique_sessions]));
+    const funnel = FUNNEL_STAGES.map((stage) => ({
+      stage,
+      unique_sessions: sessionsByStage.get(stage) ?? 0,
     }));
 
-    // 6. Calculate rates
-    const pageViews = funnel.find((f) => f.stage === 'PageView')?.unique_sessions || 0;
-    const addToCarts = funnel.find((f) => f.stage === 'AddToCart')?.unique_sessions || 0;
-    const checkouts = funnel.find((f) => f.stage === 'InitiateCheckout')?.unique_sessions || 0;
-    const purchases = funnel.find((f) => f.stage === 'Purchase')?.unique_sessions || 0;
+    const dailyMap = new Map<string, Record<string, number>>();
+    for (const row of dailyAgg) {
+      const day = dailyMap.get(row._id.date) ?? {};
+      day[row._id.stage] = (day[row._id.stage] ?? 0) + row.count;
+      dailyMap.set(row._id.date, day);
+    }
+    const dailyChart = Array.from(dailyMap.entries()).map(([date, events]) => ({
+      date,
+      pageviews: events.PageView ?? 0,
+      views: events.ViewContent ?? 0,
+      carts: events.AddToCart ?? 0,
+      checkouts: events.InitiateCheckout ?? 0,
+      purchases: events.Purchase ?? 0,
+    }));
 
-    const cartAbandonmentRate =
-      addToCarts > 0
-        ? Math.round(((addToCarts - purchases) / addToCarts) * 10000) / 100
-        : 0;
-    const checkoutAbandonmentRate =
-      checkouts > 0
-        ? Math.round(((checkouts - purchases) / checkouts) * 10000) / 100
-        : 0;
-    const conversionRate =
-      pageViews > 0 ? Math.round((purchases / pageViews) * 10000) / 100 : 0;
+    const pageViews = sessionsByStage.get('PageView') ?? 0;
+    const addToCarts = sessionsByStage.get('AddToCart') ?? 0;
+    const checkouts = sessionsByStage.get('InitiateCheckout') ?? 0;
+    const purchases = sessionsByStage.get('Purchase') ?? 0;
+
+    // Clamped at 0: a purchase can be recorded for a session whose earlier
+    // events fell outside the period, which used to produce negative rates.
+    const rate = (lost: number, base: number) =>
+      base > 0 ? Math.max(0, Math.round((lost / base) * 10000) / 100) : 0;
 
     return NextResponse.json({
       success: true,
       data: {
         funnel,
         totalEvents,
-        totalRevenue,
-        cartAbandonmentRate,
-        checkoutAbandonmentRate,
-        conversionRate,
-        topAbandoned,
+        totalRevenue: (revenueAgg[0]?.total ?? 0) / 100,
+        cartAbandonmentRate: rate(addToCarts - purchases, addToCarts),
+        checkoutAbandonmentRate: rate(checkouts - purchases, checkouts),
+        conversionRate: rate(purchases, pageViews),
+        topAbandoned: abandonedAgg.map((p) => ({ name: p.name, count: p.count })),
         dailyChart,
         period: `${days}d`,
       },

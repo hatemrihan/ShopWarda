@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { piastersToCurrency } from '@/lib/money/egp';
 import { ProductCard } from '@/components/sections/product-card';
 import { useCart } from '@/features/cart/context/cart-context';
+import { track } from '@/lib/analytics';
 import type { ProductDTO, ProductListItem } from '@/features/catalog/types';
 import {
   Select,
@@ -30,6 +31,9 @@ interface SizeGuideData {
   rows: { size: string; values: Record<string, string> }[];
   notes: string;
 }
+
+/** Shown when a product has no photo. (The old path pointed at a file that did not exist.) */
+const PLACEHOLDER_IMAGE = '/images/placeholder.svg';
 
 interface ProductViewProps {
   product: ProductDTO;
@@ -65,12 +69,21 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
   ) ?? product.variants.find((v) => v.isDefault) ?? product.variants[0];
 
   const currentPrice = selectedVariant?.pricePiasters ?? product.pricePiasters;
-  const isAvailable = (selectedVariant?.stock ?? 1) > 0;
+
+  // A variant that does not track inventory is made to order and never sells
+  // out. This used to look at `stock` alone, so those products showed
+  // "Sold Out" whenever their (meaningless) stock number was 0 — and an
+  // inactive variant with stock left could still be bought.
+  const tracksInventory = selectedVariant?.trackInventory !== false;
+  const isAvailable =
+    !!selectedVariant &&
+    selectedVariant.isActive &&
+    (!tracksInventory || selectedVariant.stock > 0);
 
   // Media items list from Admin
   const mediaList = product.media.length > 0
     ? product.media
-    : [{ assetKey: 'placeholder', url: '/placeholder-product.png', alt: product.name, type: 'image' as const, isPrimary: true, sortOrder: 0 }];
+    : [{ assetKey: 'placeholder', url: PLACEHOLDER_IMAGE, alt: product.name, type: 'image' as const, isPrimary: true, sortOrder: 0 }];
 
   // Intersection Observer to detect active image in view
   useEffect(() => {
@@ -105,6 +118,17 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
 
   const { addItem } = useCart();
 
+  // Funnel: one product view per product page.
+  useEffect(() => {
+    track('ViewContent', {
+      value: product.pricePiasters,
+      content_ids: [product.id],
+      content_name: product.name,
+    });
+  }, [product.id, product.name, product.pricePiasters]);
+
+  const activeMobileMedia = mediaList[selectedImageIndex] ?? mediaList[0];
+
   const handleAddToCart = async () => {
     if (!isAvailable || isAddingToCart) return;
 
@@ -112,7 +136,8 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
       setIsAddingToCart(true);
 
       const currentPriceEGP = (selectedVariant?.pricePiasters ?? product.pricePiasters ?? 0) / 100;
-      const primaryImage = mediaList[0]?.url || '/images/hero-1.jpg';
+      const primaryImage =
+        mediaList.find((m) => m.type !== 'video')?.url || PLACEHOLDER_IMAGE;
 
       // Cart shows human-readable labels, never the slugified keys.
       const sizeValue = labelFor(sizeOption);
@@ -127,14 +152,16 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
           .join(' / ') ||
         'Default';
 
-      addItem(
+      const result = addItem(
         {
           id: product.id,
-          variantId: (selectedVariant as { _id?: string; id?: string })?._id || (selectedVariant as { _id?: string; id?: string })?.id,
+          variantId: selectedVariant?.id,
+          slug: product.slug,
           name: product.name,
           image: primaryImage,
           price: currentPriceEGP,
-          stock: selectedVariant?.stock ?? 999,
+          // Undefined = no limit, for variants that do not track inventory.
+          stock: tracksInventory ? selectedVariant?.stock : undefined,
           variant: {
             name: variantName,
             color: colorValue,
@@ -142,6 +169,21 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
         },
         1
       );
+
+      if (!result.ok) {
+        toast.error(
+          result.available > 0
+            ? `Only ${result.available} more available.`
+            : 'You already have all the available stock in your bag.'
+        );
+        return;
+      }
+
+      track('AddToCart', {
+        value: currentPrice,
+        content_ids: [product.id],
+        content_name: product.name,
+      });
 
       toast.success(`Added "${product.name}" to shopping bag`);
     } catch {
@@ -196,13 +238,17 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
                         : 'border-neutral-300 hover:border-black'
                       }`}
                   >
-                    <Image
-                      src={item.url}
-                      alt={`View ${index + 1}`}
-                      fill
-                      sizes="80px"
-                      className="object-cover"
-                    />
+                    {item.type === 'video' ? (
+                      <video src={item.url} muted playsInline preload="metadata" className="absolute inset-0 h-full w-full object-cover" />
+                    ) : (
+                      <Image
+                        src={item.url}
+                        alt={`View ${index + 1}`}
+                        fill
+                        sizes="80px"
+                        className="object-cover"
+                      />
+                    )}
                   </button>
                 ))}
               </div>
@@ -220,14 +266,19 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
                   }}
                   className="flex items-center justify-center w-full"
                 >
-                  <Image
-                    src={item.url}
-                    alt={`${product.name} - View ${index + 1}`}
-                    width={800}
-                    height={1000}
-                    priority={index === 0}
-                    className="object-contain w-full h-auto"
-                  />
+                  {item.type === 'video' ? (
+                    <video src={item.url} controls playsInline preload="metadata" className="w-full h-auto" />
+                  ) : (
+                    <Image
+                      src={item.url}
+                      alt={`${product.name} - View ${index + 1}`}
+                      width={800}
+                      height={1000}
+                      sizes="(min-width: 1024px) 600px, 100vw"
+                      priority={index === 0}
+                      className="object-contain w-full h-auto"
+                    />
+                  )}
                 </div>
               ))}
             </div>
@@ -237,14 +288,19 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
           <div className="lg:hidden col-span-1">
             <div className="overflow-hidden relative flex items-center justify-center">
               <div className="w-full flex items-center justify-center">
-                <Image
-                  src={mediaList[selectedImageIndex]?.url || mediaList[0].url}
-                  alt={`${product.name} ${selectedImageIndex + 1}`}
-                  width={800}
-                  height={1000}
-                  priority
-                  className="w-full h-auto object-contain"
-                />
+                {activeMobileMedia.type === 'video' ? (
+                  <video src={activeMobileMedia.url} controls playsInline preload="metadata" className="w-full h-auto" />
+                ) : (
+                  <Image
+                    src={activeMobileMedia.url}
+                    alt={`${product.name} ${selectedImageIndex + 1}`}
+                    width={800}
+                    height={1000}
+                    sizes="100vw"
+                    priority
+                    className="w-full h-auto object-contain"
+                  />
+                )}
               </div>
 
               {/* Mobile Dots */}
@@ -254,6 +310,7 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
                     <button
                       key={index}
                       type="button"
+                      aria-label={`Show image ${index + 1}`}
                       onClick={() => setSelectedImageIndex(index)}
                       className={`h-1.5 rounded-full transition-all duration-200 ${selectedImageIndex === index ? 'bg-black w-6' : 'bg-gray-400 w-1.5'
                         }`}
@@ -276,13 +333,17 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
                         : 'border-gray-300'
                       }`}
                   >
-                    <Image
-                      src={item.url}
-                      alt={`View ${index + 1}`}
-                      fill
-                      sizes="50px"
-                      className="object-cover"
-                    />
+                    {item.type === 'video' ? (
+                      <video src={item.url} muted playsInline preload="metadata" className="absolute inset-0 h-full w-full object-cover" />
+                    ) : (
+                      <Image
+                        src={item.url}
+                        alt={`View ${index + 1}`}
+                        fill
+                        sizes="64px"
+                        className="object-cover"
+                      />
+                    )}
                   </button>
                 ))}
               </div>
@@ -412,7 +473,7 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
             {/* Product Description from Admin */}
             {(product.description || product.shortDescription) && (
               <div className="text-sm text-black leading-relaxed pt-6 border-t border-gray-200 mt-6 font-light">
-                <p>{product.description || product.shortDescription}</p>
+                <p className="whitespace-pre-line">{product.description || product.shortDescription}</p>
               </div>
             )}
 
@@ -421,9 +482,10 @@ export function ProductView({ product, relatedProducts = [], sizeGuide }: Produc
               <button
                 type="button"
                 onClick={() => setShowMoreInfo(!showMoreInfo)}
+                aria-expanded={showMoreInfo}
                 className="w-full flex items-center justify-between py-5 text-sm text-black hover:opacity-70 transition-opacity"
               >
-                <span>More information +</span>
+                <span>More information {showMoreInfo ? '−' : '+'}</span>
               </button>
 
               {showMoreInfo && (

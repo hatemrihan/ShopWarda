@@ -11,7 +11,6 @@
  */
 
 import { useMemo, useState, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -53,6 +52,7 @@ import {
 
 import { useCart } from '@/features/cart/context/cart-context';
 import { piastersToCurrency } from '@/lib/money/egp';
+import { track } from '@/lib/analytics';
 import type { FlowerDTO, WrapDTO, BouquetSettingsDTO } from '@/features/bouquet/types';
 
 // ── Props & Types ──────────────────────────────────────────────
@@ -403,7 +403,6 @@ function OrderSummary({
 // ── Main Builder ───────────────────────────────────────────────
 
 export function BouquetBuilder({ flowers, wraps, settings }: Props) {
-  const router = useRouter();
   const { addItem } = useCart();
   const topRef = useRef<HTMLDivElement>(null);
 
@@ -500,12 +499,21 @@ export function BouquetBuilder({ flowers, wraps, settings }: Props) {
     });
   }, []);
 
-  const setColor = useCallback((flower: FlowerDTO, colorKey: string) => {
-    setSelection((prev) => ({
-      ...prev,
-      [flower.id]: { colorKey, qty: prev[flower.id]?.qty ?? 1 },
-    }));
-  }, []);
+  const setColor = useCallback(
+    (flower: FlowerDTO, colorKey: string) => {
+      setSelection((prev) => {
+        const current = prev[flower.id];
+        if (current) return { ...prev, [flower.id]: { ...current, colorKey } };
+
+        // Picking a colour on an unselected flower adds its first stem —
+        // but never past the bouquet's maximum.
+        const stems = Object.values(prev).reduce((sum, s) => sum + s.qty, 0);
+        if (stems >= settings.maxStems) return prev;
+        return { ...prev, [flower.id]: { colorKey, qty: 1 } };
+      });
+    },
+    [settings.maxStems]
+  );
 
   const handleAddToBag = useCallback(() => {
     if (!canSubmit || adding) return;
@@ -525,7 +533,7 @@ export function BouquetBuilder({ flowers, wraps, settings }: Props) {
         {
           id: `bouquet:${hash}`,
           name: `Custom Bouquet (${stemCount} stems)`,
-          image: selectedWrap?.imageUrl || lines[0]?.flower.imageUrl || '/placeholder-product.png',
+          image: selectedWrap?.imageUrl || lines[0]?.flower.imageUrl || '/images/placeholder.svg',
           price: totalMinor / 100,
           kind: 'bouquet',
           configHash: hash,
@@ -541,14 +549,24 @@ export function BouquetBuilder({ flowers, wraps, settings }: Props) {
         },
         1
       );
+      // addItem opens the bag, where the shopper can review the bouquet and
+      // check out. This used to also push /cart, which immediately bounced to
+      // /checkout — so the bag slid open on top of the checkout form.
+      track('AddToCart', { value: totalMinor, content_ids: ['custom-bouquet'], content_name: 'Custom Bouquet' });
       toast.success('Bouquet added to your bag');
-      router.push('/cart');
+
+      // Start a fresh bouquet so the same one is not added twice by accident.
+      setSelection({});
+      setWrapId('');
+      setCardOpen(false);
+      setCardMessage('');
+      setActiveStep('flowers');
     } catch {
       toast.error('Could not add this bouquet. Please try again.');
     } finally {
       setAdding(false);
     }
-  }, [canSubmit, adding, lines, selection, wrapId, cardOpen, cardMessage, stemCount, selectedWrap, totalMinor, addItem, router]);
+  }, [canSubmit, adding, lines, selection, wrapId, cardOpen, cardMessage, stemCount, selectedWrap, totalMinor, addItem]);
 
   // ── Render ────────────────────────────────────────────
 
@@ -748,7 +766,10 @@ export function BouquetBuilder({ flowers, wraps, settings }: Props) {
                       flower={flower}
                       qty={sel?.qty ?? 0}
                       colorKey={sel?.colorKey ?? ''}
-                      maxReached={aboveMaximum}
+                      // At the limit, not past it: the "+" used to stay live
+                      // until the bouquet was already one stem over, leaving
+                      // the shopper with an invalid bouquet to fix.
+                      maxReached={stemCount >= settings.maxStems}
                       onSetQty={(q) => setQty(flower, q)}
                       onSetColor={(k) => setColor(flower, k)}
                     />

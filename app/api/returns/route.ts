@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import connectDB from '@/lib/db/mongoose';
 import { ReturnRequest } from '@/lib/db/models/return-request.model';
 import { requireAdmin } from '@/lib/auth/require-admin';
+import { UnauthorizedError } from '@/lib/errors';
 
 /**
  * POST /api/returns  (public – storefront return request form)
@@ -42,6 +43,9 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof UnauthorizedError) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
     const msg =
       error instanceof Error ? error.message : 'Failed to submit return request';
     return NextResponse.json(
@@ -76,6 +80,9 @@ export async function GET() {
 
     return NextResponse.json({ success: true, data });
   } catch (error) {
+    if (error instanceof UnauthorizedError) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
     const msg =
       error instanceof Error ? error.message : 'Failed to fetch return requests';
     return NextResponse.json(

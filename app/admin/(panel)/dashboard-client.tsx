@@ -16,9 +16,11 @@ function statusColor(status: string) {
   const s = status.toLowerCase();
   if (s === 'delivered') return 'text-green-400 bg-green-400/10';
   if (s === 'shipped') return 'text-blue-400 bg-blue-400/10';
-  if (s === 'processing') return 'text-amber-400 bg-amber-400/10';
+  // Same labels as the Orders screen (pending/confirmed), plus the stored
+  // names they map to.
+  if (s === 'processing' || s === 'confirmed') return 'text-amber-400 bg-amber-400/10';
   if (s === 'cancelled') return 'text-red-400 bg-red-400/10';
-  if (s === 'new') return 'text-orange-400 bg-orange-400/10';
+  if (s === 'new' || s === 'pending') return 'text-orange-400 bg-orange-400/10';
   return 'text-white/40 bg-white/[0.04]';
 }
 
@@ -50,6 +52,7 @@ function StatusBreakdown({ data }: { data: { status: string; count: number }[] }
   const colors: Record<string, string> = {
     Delivered: '#4ade80', Shipped: '#60a5fa', Processing: '#fbbf24',
     Cancelled: '#f87171', New: '#fb923c',
+    Confirmed: '#fbbf24', Pending: '#fb923c',
   };
 
   return (

@@ -1,41 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth-options';
-import { cookies } from 'next/headers';
-import { decode } from 'next-auth/jwt';
+import { z } from 'zod';
 import connectDB from '@/lib/db/mongoose';
-import { getSettings, StoreSettings } from '@/lib/db/models/store-settings.model';
+import { getSettings } from '@/lib/db/models/store-settings.model';
+import { guardAdmin } from '@/lib/auth/api-guard';
+import { invalidateSettings } from '@/lib/cache';
+import type { IShippingZone } from '@/lib/db/types';
 
-async function checkAdminAuth() {
-  const session = await getServerSession(authOptions);
-  if (session?.user?.adminId) return true;
+const piasters = z.number().int('Amounts must be whole piasters').min(0).max(100_000_000);
 
-  try {
-    const cookieStore = await cookies();
-    const sessionToken =
-      cookieStore.get('next-auth.session-token')?.value ||
-      cookieStore.get('__Secure-next-auth.session-token')?.value;
+const entrySchema = z.object({
+  governorate: z.string().trim().min(1).max(150),
+  shipping_cost: piasters,
+  cod_fee: piasters.optional(),
+  estimated_days: z.number().min(0).max(60).optional(),
+  is_active: z.boolean().optional(),
+});
 
-    if (sessionToken) {
-      const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || '';
-      const token = await decode({ token: sessionToken, secret });
-      if (token?.adminId) return true;
-    }
-  } catch (err) {
-    console.error('[ADMIN AUTH CHECK] Error decoding token:', err);
-  }
-  return false;
-}
+const bodySchema = z.union([
+  z.object({ bulk: z.literal(true), entries: z.array(entrySchema).min(1).max(500) }),
+  entrySchema,
+]);
 
 /**
  * GET /api/admin/governorate-pricing
  * Admin: Fetch all shipping zones.
  */
 export async function GET() {
-  const isAuth = await checkAdminAuth();
-  if (!isAuth) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const denied = await guardAdmin();
+  if (denied) return denied;
 
   try {
     await connectDB();
@@ -64,70 +56,60 @@ export async function GET() {
  * Admin: Upsert single or bulk governorate pricing entries.
  */
 export async function POST(req: NextRequest) {
-  const isAuth = await checkAdminAuth();
-  if (!isAuth) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const denied = await guardAdmin();
+  if (denied) return denied;
 
   try {
-    await connectDB();
-    const body = await req.json();
-
-    if (body.bulk && Array.isArray(body.entries)) {
-      // Bulk upsert
-      const settings = await getSettings();
-      const existingMap = new Map(
-        settings.shippingZones.map((z) => [z.governorate, z])
-      );
-
-      for (const entry of body.entries) {
-        existingMap.set(entry.governorate, {
-          governorate: entry.governorate,
-          feeMinor: entry.shipping_cost,
-          codFeeMinor: entry.cod_fee ?? 0,
-          estimatedDays: entry.estimated_days ?? 3,
-          enabled: entry.is_active ?? true,
-        });
-      }
-
-      await StoreSettings.updateOne(
-        { key: 'main' },
-        { $set: { shippingZones: Array.from(existingMap.values()) } },
-      );
-
-      return NextResponse.json({ success: true });
-    }
-
-    // Single upsert
-    const { governorate, shipping_cost, cod_fee, estimated_days, is_active } = body;
-
-    if (!governorate || shipping_cost == null) {
+    const parsed = bodySchema.safeParse(await req.json());
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
       return NextResponse.json(
-        { success: false, error: 'Missing required fields' },
+        {
+          success: false,
+          error: issue ? `${issue.path.join('.')}: ${issue.message}` : 'Invalid pricing data',
+        },
         { status: 400 },
       );
     }
 
+    const entries = 'bulk' in parsed.data ? parsed.data.entries : [parsed.data];
+
+    await connectDB();
     const settings = await getSettings();
-    const idx = settings.shippingZones.findIndex(
-      (z) => z.governorate === governorate
+
+    const zones = new Map<string, IShippingZone>(
+      settings.shippingZones.map((z) => [
+        z.governorate,
+        {
+          governorate: z.governorate,
+          feeMinor: z.feeMinor,
+          codFeeMinor: z.codFeeMinor ?? 0,
+          estimatedDays: z.estimatedDays,
+          enabled: z.enabled,
+        },
+      ]),
     );
 
-    const zone = {
-      governorate,
-      feeMinor: shipping_cost,
-      codFeeMinor: cod_fee ?? 0,
-      estimatedDays: estimated_days ?? 3,
-      enabled: is_active ?? true,
-    };
-
-    if (idx >= 0) {
-      settings.shippingZones[idx] = zone;
-    } else {
-      settings.shippingZones.push(zone);
+    for (const entry of entries) {
+      const existing = zones.get(entry.governorate);
+      zones.set(entry.governorate, {
+        governorate: entry.governorate,
+        feeMinor: entry.shipping_cost,
+        codFeeMinor: entry.cod_fee ?? 0,
+        // The admin screen does not edit delivery days; keep what is stored
+        // instead of resetting it to 3 on every save.
+        estimatedDays: entry.estimated_days ?? existing?.estimatedDays ?? 3,
+        enabled: entry.is_active ?? existing?.enabled ?? true,
+      });
     }
 
+    // Saved through the document (not a raw $set) so the schema's validators
+    // run — a negative or fractional fee can no longer be stored.
+    settings.shippingZones = Array.from(zones.values());
     await settings.save();
+
+    // Checkout reads zones from the settings cache.
+    invalidateSettings();
 
     return NextResponse.json({ success: true });
   } catch (error) {

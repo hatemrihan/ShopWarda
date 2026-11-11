@@ -1,12 +1,21 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Suspense } from 'react';
+import { Suspense, cache } from 'react';
 import { notFound, redirect } from 'next/navigation';
 import { categoryService } from '@/features/catalog/server/category.service';
 import { productService } from '@/features/catalog/server/product.service';
+import {
+  PRODUCTS_PER_PAGE,
+  pageHref,
+  parsePage,
+  parseSort,
+  type SearchParams,
+} from '@/features/catalog/listing';
 import { ProductCard } from '@/components/sections/product-card';
 import { ProductFilterBar } from '@/components/sections/product-filter-bar';
 import { EmptyState } from '@/components/shared/empty-state';
+import { Pagination } from '@/components/shared/pagination';
+import type { CategoryDTO } from '@/features/catalog/types';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -18,53 +27,54 @@ import {
 
 interface Props {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+  searchParams: Promise<SearchParams>;
 }
 
-const SORT_MAP: Record<string, { sortBy: 'name' | 'price' | 'createdAt' | 'updatedAt'; sortOrder: 'asc' | 'desc' }> = {
-  newest: { sortBy: 'createdAt', sortOrder: 'desc' },
-  oldest: { sortBy: 'createdAt', sortOrder: 'asc' },
-  'price-asc': { sortBy: 'price', sortOrder: 'asc' },
-  'price-desc': { sortBy: 'price', sortOrder: 'desc' },
-  'name-asc': { sortBy: 'name', sortOrder: 'asc' },
-  'name-desc': { sortBy: 'name', sortOrder: 'desc' },
-};
+type Lookup =
+  | { kind: 'found'; category: CategoryDTO }
+  | { kind: 'moved'; slug: string }
+  | { kind: 'missing' };
+
+/** Resolved once per request for both generateMetadata and the page. */
+const lookupCategory = cache(async (slug: string): Promise<Lookup> => {
+  try {
+    return { kind: 'found', category: await categoryService.getBySlugCached(slug) };
+  } catch (error: unknown) {
+    const redirectSlug = (error as { redirectSlug?: unknown } | null)?.redirectSlug;
+    if (typeof redirectSlug === 'string') return { kind: 'moved', slug: redirectSlug };
+    return { kind: 'missing' };
+  }
+});
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  try {
-    const category = await categoryService.getBySlug(slug);
-    return {
-      title: category.seo?.title ?? category.name,
-      description: category.seo?.description ?? category.description ?? `Shop ${category.name}`,
-    };
-  } catch {
-    return { title: 'Category' };
-  }
+  const result = await lookupCategory(slug);
+  if (result.kind !== 'found') return { title: 'Category' };
+
+  const { category } = result;
+  return {
+    title: category.seo?.title ?? category.name,
+    description: category.seo?.description ?? category.description ?? `Shop ${category.name}`,
+    alternates: { canonical: `/categories/${category.slug}` },
+  };
 }
 
 export default async function CategoryPage({ params, searchParams }: Props) {
   const { slug } = await params;
   const sp = await searchParams;
 
-  let category;
-  try {
-    category = await categoryService.getBySlug(slug);
-  } catch (error: unknown) {
-    if (error && typeof error === 'object' && 'redirectSlug' in error && typeof (error as { redirectSlug?: unknown }).redirectSlug === 'string') {
-      redirect(`/categories/${(error as { redirectSlug: string }).redirectSlug}`);
-    }
-    notFound();
-  }
+  const result = await lookupCategory(slug);
+  if (result.kind === 'moved') redirect(`/categories/${result.slug}`);
+  if (result.kind === 'missing') notFound();
+  const { category } = result;
 
-  // Parse sort from URL
-  const sortKey = typeof sp.sort === 'string' ? sp.sort : 'newest';
-  const sort = SORT_MAP[sortKey] ?? SORT_MAP.newest;
+  const sort = parseSort(sp);
+  const page = parsePage(sp);
+  const basePath = `/categories/${category.slug}`;
 
-  // Fetch products for this category with sort
   const products = await productService.listCached(
     { status: 'active', categoryId: category.id, ...sort },
-    { page: 1, pageSize: 24 }
+    { page, pageSize: PRODUCTS_PER_PAGE },
   );
 
   return (
@@ -93,7 +103,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
               categories={[]}
               totalProducts={products.total}
               activeCategoryId={category.id}
-              basePath={`/categories/${slug}`}
+              basePath={basePath}
             />
           </Suspense>
         </div>
@@ -114,14 +124,25 @@ export default async function CategoryPage({ params, searchParams }: Props) {
           <EmptyState
             title="No products in this category"
             description="Check back soon for new additions."
+            action={
+              <Link href="/shop" className="text-sm underline underline-offset-4 hover:no-underline">
+                Browse all products
+              </Link>
+            }
           />
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-10 sm:gap-x-7 sm:gap-y-14">
-            {products.items.map((product) => (
-              <ProductCard key={product.id} product={product} />
+            {products.items.map((product, index) => (
+              <ProductCard key={product.id} product={product} priority={index < 4} />
             ))}
           </div>
         )}
+
+        <Pagination
+          page={page}
+          totalPages={products.totalPages}
+          hrefFor={(p) => pageHref(basePath, sp, p)}
+        />
       </div>
     </div>
   );

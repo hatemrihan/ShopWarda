@@ -21,6 +21,9 @@ import { ValidationError } from '@/lib/errors';
 import logger from '@/lib/logger';
 import { invalidateProducts } from '@/lib/cache';
 import { computeOrderPricing, computePromoDiscount, type PricingResult } from '../pricing';
+import { placeOrderInputSchema } from '../schemas';
+import { resolveShippingZone } from '../shipping';
+import { ORDER_STATUS } from '@/lib/db/types';
 import { priceBouquet } from '@/features/bouquet/server/bouquet.service';
 import type { BouquetConfig } from '@/features/bouquet/schemas';
 import type {
@@ -170,23 +173,25 @@ export const orderService = {
    * Create an order from checkout input.
    * Throws ValidationError for anything the customer can fix.
    */
-  async placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResult> {
+  async placeOrder(rawInput: PlaceOrderInput): Promise<PlaceOrderResult> {
+    // Trust boundary: everything below works on the parsed value only.
+    const parsed = placeOrderInputSchema.safeParse(rawInput);
+    if (!parsed.success) {
+      const details: Record<string, string[]> = {};
+      for (const issue of parsed.error.issues) {
+        const path = issue.path.join('.') || 'order';
+        (details[path] ??= []).push(issue.message);
+      }
+      throw new ValidationError(
+        parsed.error.issues[0]?.message ?? 'Invalid order details',
+        details,
+      );
+    }
+    const input = parsed.data as PlaceOrderInput;
+
     await connectDB();
 
     const { customer, address, items, paymentMethod } = input;
-
-    if (!customer?.name || !customer?.phone) {
-      throw new ValidationError('Customer name and phone are required', {});
-    }
-    if (!address?.governorate || !address?.city || !address?.street) {
-      throw new ValidationError('Complete address is required', {});
-    }
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      throw new ValidationError('Order must have at least one item', {});
-    }
-    if (!paymentMethod || !['cod', 'instapay'].includes(paymentMethod)) {
-      throw new ValidationError('Invalid payment method', {});
-    }
 
     const idempotencyKeyHash = buildIdempotencyHash(input);
 
@@ -216,6 +221,16 @@ export const orderService = {
       quantity: number;
     }[] = [];
     let subtotalMinor = 0;
+
+    // One round-trip for every catalog product in the bag, instead of a
+    // findById per line.
+    const productIds = [
+      ...new Set(items.filter((i) => !isBouquetItem(i)).map((i) => (i as CatalogItemInput).productId)),
+    ];
+    const productDocs = productIds.length
+      ? await Product.find({ _id: { $in: productIds } })
+      : [];
+    const productsById = new Map(productDocs.map((p) => [p._id.toString(), p]));
 
     for (const item of items) {
       // ── Custom bouquet: priced entirely server-side ───────────
@@ -263,9 +278,12 @@ export const orderService = {
         continue;
       }
 
-      const product = await Product.findById(item.productId);
+      const product = productsById.get(item.productId);
       if (!product || product.status !== 'active') {
-        throw new ValidationError(`Product not found: ${item.productId}`, {});
+        throw new ValidationError(
+          'An item in your bag is no longer available. Please remove it and try again.',
+          {},
+        );
       }
 
       let variant = product.variants.find(
@@ -288,7 +306,9 @@ export const orderService = {
 
       if (variant.trackInventory && variant.stock < item.quantity) {
         throw new ValidationError(
-          `Insufficient stock for ${product.name}. Available: ${variant.stock}`,
+          variant.stock > 0
+            ? `Only ${variant.stock} of ${product.name} left in stock. Please update your bag.`
+            : `${product.name} is sold out. Please remove it from your bag.`,
           {},
         );
       }
@@ -337,12 +357,34 @@ export const orderService = {
 
     // ── Shipping / COD fee from store settings ──────────────────
     const settings = await getSettings();
-    const zone = settings.shippingZones.find(
-      (z) => z.governorate === address.governorate && z.enabled,
+
+    // A payment method the shop has switched off must not be accepted just
+    // because a stale page (or a hand-written request) still offers it.
+    if (paymentMethod === 'cod' && settings.codEnabled === false) {
+      throw new ValidationError('Cash on delivery is not available right now.', {});
+    }
+    if (paymentMethod === 'instapay' && settings.instaPayEnabled === false) {
+      throw new ValidationError('InstaPay is not available right now.', {});
+    }
+
+    // Same resolver the checkout page uses, so the fee charged is the fee shown.
+    // Previously only the governorate row was consulted: per-city rates set in
+    // admin were ignored, and a governorate the shop had switched off was
+    // silently delivered to for free.
+    const resolution = resolveShippingZone(
+      settings.shippingZones,
+      address.governorate,
+      address.city,
     );
-    const shippingFeeMinor = zone?.feeMinor ?? 0;
+    if (!resolution.ok) {
+      throw new ValidationError(
+        'Sorry, we do not deliver to this area yet. Please choose another governorate.',
+        {},
+      );
+    }
+    const shippingFeeMinor = resolution.shipping?.feeMinor ?? 0;
     const codFeeMinor =
-      paymentMethod === 'cod' && zone?.codFeeMinor ? zone.codFeeMinor : 0;
+      paymentMethod === 'cod' ? (resolution.shipping?.codFeeMinor ?? 0) : 0;
 
     // ── Promo ───────────────────────────────────────────────────
     let discountMinor = 0;
@@ -372,9 +414,27 @@ export const orderService = {
       freeDeliveryThresholdMinor: settings.freeDeliveryThresholdMinor,
     });
 
-    const orderNumber = await getNextSequence('orderNumber');
+    // Reserve stock *before* the order exists. The old flow checked stock,
+    // wrote the order, then decremented — two buyers racing for the last unit
+    // both passed the check and both got an order. The guarded decrement makes
+    // the second one fail here instead, with nothing to clean up.
+    const reserved = await reserveStock(stockDecrements);
+    if (!reserved.ok) {
+      const name = orderItems.find(
+        (i) => i.sourceVariantId && String(i.sourceVariantId) === reserved.failedVariantId,
+      )?.productName;
+      throw new ValidationError(
+        `${name ?? 'An item in your bag'} just sold out. Please update your bag and try again.`,
+        {},
+      );
+    }
 
-    const order = await Order.create({
+    let order;
+    let orderNumber: string;
+    try {
+      orderNumber = await getNextSequence('orderNumber');
+
+      order = await Order.create({
       orderNumber,
       idempotencyKeyHash,
       guest: {
@@ -387,7 +447,8 @@ export const orderService = {
         city: address.city,
         area: address.area ?? '',
         street: address.street,
-        building: address.building,
+        // The checkout form has no building field; the schema requires one.
+        building: address.building || 'N/A',
         floor: address.floor,
         apartment: address.apartment,
         landmark: address.landmark,
@@ -422,8 +483,13 @@ export const orderService = {
       promotionCode: appliedPromoCode,
       deliveryNotes: input.deliveryNotes?.trim(),
       customerNote: input.customerNote?.trim(),
-      status: 'new',
-    });
+        status: 'new',
+      });
+    } catch (err) {
+      // The order was not written — hand the reserved units back.
+      await releaseStock(stockDecrements, 'order-create-failed');
+      throw err;
+    }
 
     // ── Post-create side effects (never fatal to a placed order) ─
     if (promoIdToIncrement) {
@@ -437,11 +503,17 @@ export const orderService = {
       }
     }
 
-    await decrementStock(stockDecrements, order.orderNumber);
-
     // Stock just changed outside the admin mutation path, so the tag-cached
     // catalog reads must be dropped or the PDP will show stale availability.
-    if (stockDecrements.length > 0) {
+    // Only when a variant actually ran out, though: flushing the whole catalog
+    // cache on every order made each sale a cold page for the next visitor.
+    const soldOut = stockDecrements.some((dec) => {
+      const variant = productsById
+        .get(String(dec.productId))
+        ?.variants.find((v: IVariant) => String(v._id) === String(dec.variantId));
+      return !variant || variant.stock - dec.quantity <= (variant.lowStockThreshold ?? 0);
+    });
+    if (soldOut) {
       try {
         invalidateProducts();
       } catch (err) {
@@ -467,23 +539,53 @@ export const orderService = {
 
   /** Admin: update order status */
   async updateStatus(orderId: string, status: string, adminId: string, note?: string) {
+    const nextStatus = ORDER_STATUS.find((s) => s === status);
+    if (!nextStatus) {
+      throw new ValidationError(`Unknown order status: ${status}`, {});
+    }
+    if (!isValidObjectId(orderId)) throw new ValidationError('Order not found', {});
+
     await connectDB();
     const order = await Order.findById(orderId);
     if (!order) throw new ValidationError('Order not found', {});
 
-    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-    order.status = status as any;
+    const previousStatus = order.status;
+    if (previousStatus === nextStatus) return order;
+
+    order.status = nextStatus;
     order.statusHistory.push({
-      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-      status: status as any,
+      status: nextStatus,
       at: new Date(),
-      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-      adminId: adminId as any,
+      adminId: toObjectId(adminId),
       note,
     });
 
     await order.save();
-    logger.info('Order status updated', { orderId, status, adminId });
+
+    // Cancelling frees the units the order was holding; un-cancelling takes
+    // them again (best effort — the admin has decided the order stands).
+    const moves = stockMovesOf(order.items);
+    if (moves.length > 0) {
+      if (nextStatus === 'cancelled') {
+        await releaseStock(moves, `order-cancelled:${order.orderNumber}`);
+      } else if (previousStatus === 'cancelled') {
+        const retaken = await reserveStock(moves);
+        if (!retaken.ok) {
+          logger.warn('Re-opened a cancelled order without enough stock', {
+            orderNumber: order.orderNumber,
+          });
+        }
+      }
+      if (nextStatus === 'cancelled' || previousStatus === 'cancelled') {
+        try {
+          invalidateProducts();
+        } catch (err) {
+          logger.error('Catalog cache invalidation failed', { orderId, err });
+        }
+      }
+    }
+
+    logger.info('Order status updated', { orderId, status: nextStatus, adminId });
     return order;
   },
 
@@ -511,39 +613,74 @@ function toObjectId(id: string): Types.ObjectId | undefined {
   return isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : undefined;
 }
 
-/**
- * Guarded stock decrement: only decrements when the variant still holds enough
- * stock, so concurrent orders cannot drive it negative. A miss is logged and
- * tolerated — the order stands, arrangements are made to order.
- */
-async function decrementStock(
-  decrements: { productId: Types.ObjectId; variantId: Types.ObjectId; quantity: number }[],
-  orderNumber: string,
-): Promise<void> {
-  for (const dec of decrements) {
-    try {
-      const result = await Product.updateOne(
-        {
-          _id: dec.productId,
-          variants: {
-            $elemMatch: { _id: dec.variantId, stock: { $gte: dec.quantity } },
-          },
-        },
-        { $inc: { 'variants.$.stock': -dec.quantity } },
-      );
+interface StockMove {
+  productId: Types.ObjectId;
+  variantId: Types.ObjectId;
+  quantity: number;
+}
 
-      if (result.modifiedCount === 0) {
-        logger.warn('Stock decrement missed', {
-          orderNumber,
-          productId: String(dec.productId),
-          variantId: String(dec.variantId),
-          quantity: dec.quantity,
-        });
-      }
+/**
+ * Atomically take stock for every line, or take none.
+ *
+ * Each decrement is guarded (`stock >= quantity`), so concurrent checkouts
+ * cannot drive a variant negative. If any line misses, the lines already taken
+ * are handed back and the caller is told which variant ran out.
+ */
+async function reserveStock(
+  moves: StockMove[],
+): Promise<{ ok: true } | { ok: false; failedVariantId: string }> {
+  const taken: StockMove[] = [];
+
+  for (const move of moves) {
+    const result = await Product.updateOne(
+      {
+        _id: move.productId,
+        variants: {
+          $elemMatch: { _id: move.variantId, stock: { $gte: move.quantity } },
+        },
+      },
+      { $inc: { 'variants.$.stock': -move.quantity } },
+    );
+
+    if (result.modifiedCount === 0) {
+      await releaseStock(taken, 'reservation-rolled-back');
+      return { ok: false, failedVariantId: String(move.variantId) };
+    }
+    taken.push(move);
+  }
+
+  return { ok: true };
+}
+
+/** Hand units back (failed order, cancelled order). Never throws. */
+async function releaseStock(moves: StockMove[], reason: string): Promise<void> {
+  for (const move of moves) {
+    try {
+      await Product.updateOne(
+        { _id: move.productId, 'variants._id': move.variantId },
+        { $inc: { 'variants.$.stock': move.quantity } },
+      );
     } catch (err) {
-      logger.error('Stock decrement failed', { orderNumber, err });
+      logger.error('Stock release failed', {
+        reason,
+        productId: String(move.productId),
+        variantId: String(move.variantId),
+        quantity: move.quantity,
+        err,
+      });
     }
   }
+}
+
+/** The stock a placed order is holding (catalog lines only; bouquets hold none). */
+function stockMovesOf(items: IOrderItem[]): StockMove[] {
+  return items
+    .filter((i) => i.sourceProductId && i.sourceVariantId)
+    .map((i) => ({
+      productId: i.sourceProductId as Types.ObjectId,
+      variantId: i.sourceVariantId as Types.ObjectId,
+      quantity: i.quantity,
+    }));
 }
 
 function buildEmailPayload(

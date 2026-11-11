@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import connectDB from '@/lib/db/mongoose';
-import { getSettings } from '@/lib/db/models/store-settings.model';
+import { getCheckoutConfig } from '@/features/settings/server/settings.service';
 
 /**
  * GET /api/payment-settings
@@ -11,18 +10,14 @@ import { getSettings } from '@/lib/db/models/store-settings.model';
  */
 export async function GET() {
   try {
-    await connectDB();
-    const settings = await getSettings();
+    const config = await getCheckoutConfig();
 
     return NextResponse.json({
       success: true,
       settings: {
-        codEnabled: settings.codEnabled,
-        instaPayEnabled: settings.instaPayEnabled,
-        instaPay: {
-          accountLink: settings.instaPay?.accountLink ?? '',
-          instructions: settings.instaPay?.instructions ?? '',
-        },
+        codEnabled: config.codEnabled,
+        instaPayEnabled: config.instaPayEnabled,
+        instaPay: config.instaPay,
       },
     });
   } catch (error) {

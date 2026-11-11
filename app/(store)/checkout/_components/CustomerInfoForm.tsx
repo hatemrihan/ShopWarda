@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useMemo } from 'react';
 import {
   EGYPT_GOVERNORATES,
   getCitiesForGovernorate,
@@ -10,16 +10,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
+import type { ShippingZoneLike } from '@/features/checkout/shipping';
 
-interface GovernoratePrice {
-  governorate: string;
-  shipping_cost: number;
-  cod_fee: number;
-  estimated_days: number;
-}
-
-interface CustomerInfo {
+export interface CustomerInfo {
   name: string;
   phone: string;
   email: string;
@@ -39,52 +32,28 @@ interface CustomerInfo {
 interface CustomerInfoFormProps {
   value: CustomerInfo;
   onChange: (info: CustomerInfo) => void;
-  onShippingChange: (shipping: number, codFee: number, estimatedDays: number) => void;
+  /** Shipping zones from store settings, provided by the server with the page. */
+  zones: readonly ShippingZoneLike[];
   errors?: Record<string, string>;
 }
 
 export function CustomerInfoForm({
   value,
   onChange,
-  onShippingChange,
+  zones,
   errors = {},
 }: CustomerInfoFormProps) {
-  const [governoratePricing, setGovernoratePricing] = useState<GovernoratePrice[]>([]);
-  const [pricingLoading, setPricingLoading] = useState(true);
-
   // Derive city list directly from current governorate selection
   const cities = value.governorate ? getCitiesForGovernorate(value.governorate) : [];
 
-  // Fetch governorate pricing on mount
-  useEffect(() => {
-    async function fetchPricing() {
-      try {
-        setPricingLoading(true);
-        const res = await fetch('/api/governorate-pricing');
-        const data = await res.json();
-        if (data.success) {
-          setGovernoratePricing(data.pricing);
-        }
-      } catch (err) {
-        console.error('Failed to fetch pricing:', err);
-      } finally {
-        setPricingLoading(false);
-      }
-    }
-    fetchPricing();
-  }, []);
-
-  // Update shipping cost when governorate or pricing changes
-  useEffect(() => {
-    if (value.governorate && governoratePricing.length > 0) {
-      const pricing = governoratePricing.find(
-        (p) => p.governorate === value.governorate
-      );
-      if (pricing) {
-        onShippingChange(pricing.shipping_cost, pricing.cod_fee, pricing.estimated_days);
-      }
-    }
-  }, [value.governorate, governoratePricing, onShippingChange]);
+  // Only offer governorates the shop delivers to. Every governorate in Egypt
+  // used to be listed regardless, so a shopper could pick one that had been
+  // switched off in admin and be charged nothing for delivery.
+  const governorates = useMemo(() => {
+    if (zones.length === 0) return EGYPT_GOVERNORATES; // delivery not configured yet
+    const enabled = new Set(zones.filter((z) => z.enabled).map((z) => z.governorate));
+    return EGYPT_GOVERNORATES.filter((g) => enabled.has(g.name));
+  }, [zones]);
 
   const handleLocationDetected = (detectedGov: string, detectedCity: string, lat?: number, lng?: number) => {
     const cleanGov = detectedGov.replace(/^محافظة\s*/, '').trim();
@@ -109,6 +78,12 @@ export function CustomerInfoForm({
         cleanCity.includes(g.name) ||
         g.cities.some((c) => c.includes(cleanCity) || cleanCity.includes(c))
       );
+    }
+
+    const detectedName = matchedGov?.name;
+    if (detectedName && !governorates.some((g) => g.name === detectedName)) {
+      // Detected, but not somewhere we deliver — keep the coordinates only.
+      matchedGov = undefined;
     }
 
     if (matchedGov) {
@@ -144,6 +119,13 @@ export function CustomerInfoForm({
     }
   };
 
+  /** Arabic-Indic and Persian digits → ASCII, then strip everything else. */
+  const normalizeDigits = (input: string) =>
+    input
+      .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+      .replace(/[\u06F0-\u06F9]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+      .replace(/\D/g, '');
+
   const labelClass = 'block text-[11px] font-bold text-neutral-800 uppercase tracking-wider mb-1';
 
   return (
@@ -160,6 +142,9 @@ export function CustomerInfoForm({
             <Label className={labelClass}>Full Name *</Label>
             <Input
               type="text"
+              name="name"
+              autoComplete="name"
+              data-invalid={errors.name ? 'true' : undefined}
               value={value.name}
               onChange={(e) => updateField('name', e.target.value)}
               placeholder="First and last name"
@@ -173,8 +158,15 @@ export function CustomerInfoForm({
             <Label className={labelClass}>Phone Number *</Label>
             <Input
               type="tel"
+              name="tel"
+              autoComplete="tel-national"
+              inputMode="numeric"
+              maxLength={11}
+              data-invalid={errors.phone ? 'true' : undefined}
               value={value.phone}
-              onChange={(e) => updateField('phone', e.target.value)}
+              // Digits only, and Arabic-Indic numerals (٠١٢…) typed on an
+              // Arabic keyboard are accepted rather than rejected as invalid.
+              onChange={(e) => updateField('phone', normalizeDigits(e.target.value))}
               placeholder="01XXXXXXXXX"
               className={`text-xs border-b border-t-0 border-x-0 rounded-none bg-transparent shadow-none px-1 focus-visible:ring-0 focus-visible:border-neutral-900 ${
                 errors.phone ? 'border-red-500 text-red-900' : 'border-neutral-300'
@@ -190,12 +182,19 @@ export function CustomerInfoForm({
           <Label className={labelClass}>E-mail (Optional)</Label>
           <Input
             type="email"
+            name="email"
+            autoComplete="email"
+            inputMode="email"
+            data-invalid={errors.email ? 'true' : undefined}
             value={value.email}
             onChange={(e) => updateField('email', e.target.value)}
             placeholder="your@email.com"
-            className="text-xs border-b border-t-0 border-x-0 rounded-none bg-transparent shadow-none px-1 focus-visible:ring-0 focus-visible:border-neutral-900 border-neutral-300"
+            className={`text-xs border-b border-t-0 border-x-0 rounded-none bg-transparent shadow-none px-1 focus-visible:ring-0 focus-visible:border-neutral-900 ${
+              errors.email ? 'border-red-500 text-red-900' : 'border-neutral-300'
+            }`}
             dir="ltr"
           />
+          {errors.email && <p className="mt-1 text-[11px] text-red-500 font-medium">{errors.email}</p>}
         </div>
       </div>
 
@@ -208,13 +207,7 @@ export function CustomerInfoForm({
           <LocationDetector onLocationDetected={handleLocationDetected} />
         </div>
 
-        {pricingLoading ? (
-          <div className="space-y-3 py-2">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-          </div>
-        ) : (
-          <>
+        <>
             {/* Governorate & City */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -227,6 +220,9 @@ export function CustomerInfoForm({
                   )}
                 </div>
                 <select
+                  name="governorate"
+                  autoComplete="address-level1"
+                  data-invalid={errors.governorate ? 'true' : undefined}
                   value={value.governorate}
                   onChange={(e) => updateField('governorate', e.target.value)}
                   className={`w-full py-2.5 px-1 bg-transparent border-b text-xs font-medium outline-none cursor-pointer ${
@@ -234,7 +230,7 @@ export function CustomerInfoForm({
                   }`}
                 >
                   <option value="">Select governorate</option>
-                  {EGYPT_GOVERNORATES.map((g) => (
+                  {governorates.map((g) => (
                     <option key={g.name} value={g.name}>
                       {g.name} — {g.nameEn}
                     </option>
@@ -249,6 +245,9 @@ export function CustomerInfoForm({
                 <Label className={labelClass}>City *</Label>
                 {cities.length > 0 ? (
                   <select
+                    name="city"
+                    autoComplete="address-level2"
+                    data-invalid={errors.city ? 'true' : undefined}
                     value={value.city}
                     onChange={(e) => updateField('city', e.target.value)}
                     className={`w-full py-2.5 px-1 bg-transparent border-b text-xs font-medium outline-none cursor-pointer ${
@@ -291,6 +290,9 @@ export function CustomerInfoForm({
                 <Label className={labelClass}>Street Address *</Label>
                 <Input
                   type="text"
+                  name="street"
+                  autoComplete="street-address"
+                  data-invalid={errors.street ? 'true' : undefined}
                   value={value.street}
                   onChange={(e) => updateField('street', e.target.value)}
                   placeholder="Street name & number"
@@ -325,8 +327,7 @@ export function CustomerInfoForm({
                 className="text-xs border-b border-t-0 border-x-0 rounded-none bg-transparent shadow-none px-1 focus-visible:ring-0 focus-visible:border-neutral-900 border-neutral-300 resize-none min-h-[50px]"
               />
             </div>
-          </>
-        )}
+        </>
       </div>
     </div>
   );

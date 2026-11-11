@@ -282,6 +282,19 @@ productSchema.index(
   { name: 'shop_category_filter' }
 );
 
+// Default storefront listing: active products, newest first. The index above
+// cannot serve this sort, so "Shop" and "Latest Arrivals" sorted in memory.
+productSchema.index(
+  { status: 1, createdAt: -1 },
+  { name: 'shop_newest' }
+);
+
+// Old URLs → current product (see productRepository.findByPreviousSlug).
+productSchema.index(
+  { previousSlugs: 1 },
+  { sparse: true, name: 'product_previous_slugs' }
+);
+
 // Tag-based search
 productSchema.index({ tags: 1 }, { name: 'product_tags' });
 

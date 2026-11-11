@@ -4,7 +4,7 @@ import { Contact } from '@/lib/db/models/contact.model';
 import { requireAdmin } from '@/lib/auth/require-admin';
 import { checkRateLimit, contactLimiter } from '@/lib/security/rate-limit';
 import { getClientIp } from '@/lib/auth/api-guard';
-import { RateLimitError } from '@/lib/errors';
+import { RateLimitError, UnauthorizedError } from '@/lib/errors';
 
 /**
  * POST /api/contacts  (public – storefront contact form)
@@ -55,6 +55,9 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof UnauthorizedError) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
     if (error instanceof RateLimitError) {
       return NextResponse.json(
         { success: false, error: 'Too many submissions. Please try again later.' },
@@ -98,6 +101,9 @@ export async function GET() {
 
     return NextResponse.json({ success: true, data });
   } catch (error) {
+    if (error instanceof UnauthorizedError) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
     const msg =
       error instanceof Error ? error.message : 'Failed to fetch contacts';
     return NextResponse.json(

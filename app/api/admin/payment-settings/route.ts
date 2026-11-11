@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth-options';
 import connectDB from '@/lib/db/mongoose';
 import { getSettings, StoreSettings } from '@/lib/db/models/store-settings.model';
+import { guardAdmin } from '@/lib/auth/api-guard';
+import { invalidateSettings } from '@/lib/cache';
 
 /**
  * GET /api/admin/payment-settings
  * Admin: Fetch payment method configuration.
  */
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.adminId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const denied = await guardAdmin();
+  if (denied) return denied;
 
   try {
     await connectDB();
@@ -43,10 +41,8 @@ export async function GET() {
  * Admin: Update payment method configuration.
  */
 export async function PUT(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.adminId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const denied = await guardAdmin();
+  if (denied) return denied;
 
   try {
     await connectDB();
@@ -62,10 +58,19 @@ export async function PUT(req: NextRequest) {
     }
     if (body.instaPay) {
       if (typeof body.instaPay.accountLink === 'string') {
-        updateFields['instaPay.accountLink'] = body.instaPay.accountLink;
+        const link = body.instaPay.accountLink.trim();
+        // Rendered as the "Pay with InstaPay" link at checkout — it must be a
+        // web link, never javascript: or another scheme.
+        if (link && !/^https?:\/\//i.test(link)) {
+          return NextResponse.json(
+            { success: false, error: 'The InstaPay link must start with https://' },
+            { status: 400 },
+          );
+        }
+        updateFields['instaPay.accountLink'] = link;
       }
       if (typeof body.instaPay.instructions === 'string') {
-        updateFields['instaPay.instructions'] = body.instaPay.instructions;
+        updateFields['instaPay.instructions'] = body.instaPay.instructions.slice(0, 2000);
       }
     }
 
@@ -76,10 +81,11 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    await StoreSettings.updateOne(
-      { key: 'main' },
-      { $set: updateFields },
-    );
+    // Make sure the singleton exists before the targeted update.
+    await getSettings();
+    await StoreSettings.updateOne({ key: 'main' }, { $set: updateFields });
+
+    invalidateSettings();
 
     return NextResponse.json({ success: true });
   } catch (error) {

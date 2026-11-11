@@ -3,6 +3,7 @@
  * Must be called in EVERY admin Server Action and route handler.
  */
 
+import { cache } from 'react';
 import { auth } from '@/auth';
 import { UnauthorizedError } from '@/lib/errors';
 import connectDB from '@/lib/db/mongoose';
@@ -15,24 +16,29 @@ export interface AdminSession {
 }
 
 /**
+ * Confirms the admin behind a session still exists and is active.
+ * Cached per request: a page whose layout, loader and actions all guard
+ * themselves costs one lookup, not one per guard.
+ */
+const loadActiveAdmin = cache(async (adminId: string) => {
+  await connectDB();
+  return Admin.findById(adminId).select('isActive role').lean();
+});
+
+/**
  * Verify the current request has a valid admin session.
  * Throws UnauthorizedError if not authenticated or missing admin metadata.
  */
 export async function requireAdmin(): Promise<AdminSession> {
-  let session = await auth();
-
-  if (!session?.user?.adminId) {
-    await new Promise((r) => setTimeout(r, 300));
-    session = await auth();
-  }
+  const session = await auth();
 
   if (!session?.user?.adminId) {
     throw new UnauthorizedError('Admin authentication required');
   }
 
-  // Verify admin is still active in DB
-  await connectDB();
-  const admin = await Admin.findById(session.user.adminId).select('isActive role').lean();
+  // A valid cookie is not enough — the admin may have been deactivated since
+  // it was issued.
+  const admin = await loadActiveAdmin(session.user.adminId);
   if (!admin || !admin.isActive) {
     throw new UnauthorizedError('Admin account is inactive or disabled');
   }

@@ -6,7 +6,7 @@
 import connectDB from '@/lib/db/mongoose';
 import { Category, type ICategory } from '@/lib/db/models/category.model';
 import type { CategoryFilter, CategoryListItem, CategoryDTO } from '../types';
-import type { Types } from 'mongoose';
+import { isValidObjectId, type Types } from 'mongoose';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MongoFilter = Record<string, any>;
@@ -74,6 +74,7 @@ export const categoryRepository = {
   },
 
   async findById(id: string): Promise<CategoryDTO | null> {
+    if (!isValidObjectId(id)) return null; // malformed id → not found, not a 500
     await connectDB();
     const doc = await Category.findById(id).lean<ICategory>();
     if (!doc) return null;
@@ -147,6 +148,14 @@ export const categoryRepository = {
     }
 
     return false;
+  },
+
+  /** How many of these ids are real, non-archived categories. */
+  async countUsable(ids: string[]): Promise<number> {
+    const valid = [...new Set(ids)].filter((id) => isValidObjectId(id));
+    if (valid.length === 0) return 0;
+    await connectDB();
+    return Category.countDocuments({ _id: { $in: valid }, status: { $ne: 'archived' } });
   },
 
   async findAllActive(): Promise<CategoryListItem[]> {

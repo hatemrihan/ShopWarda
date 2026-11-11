@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { memo, useState, useEffect, useCallback } from 'react';
 import {
   Loader2, ShoppingCart, Search, ChevronDown, Package, Eye,
   Download, FileText, FileSpreadsheet, Plus, Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { ADMIN_ORDER_STATUSES } from '@/features/checkout/order-status';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -85,7 +86,8 @@ type ManualOrderForm = {
 
 // ── Constants ─────────────────────────────────────────────────
 
-const STATUSES = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'] as const;
+// Shared with the API, which translates these labels to the stored statuses.
+const STATUSES = ADMIN_ORDER_STATUSES;
 
 const STATUS_COLOR: Record<string, string> = {
   pending: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/20',
@@ -135,6 +137,28 @@ function renderNotesWithLinks(text?: string | null) {
   );
 }
 
+/**
+ * Customer-entered text (names, addresses, notes) is written into the HTML
+ * that the Excel / Word / PDF exports are built from. Unescaped, a customer
+ * could put markup or a <script> in their name and have it run in the admin's
+ * browser when the PDF print window opened.
+ */
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** Stops a cell that starts with = + - @ being run as a spreadsheet formula. */
+function csvCell(value: unknown): string {
+  const text = String(value ?? '');
+  const guarded = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  return `"${guarded.replace(/"/g, '""')}"`;
+}
+
 function buildExportRows(orders: Order[]) {
   return orders.map(o => ({
     'Order #': o.order_number,
@@ -169,10 +193,10 @@ async function exportToDOC(orders: Order[]) {
   html += '<head><meta charset="utf-8"><title>Orders Report</title></head><body>';
   html += '<h1>Orders Report</h1>';
   html += '<table border="1" style="border-collapse: collapse; width: 100%;">';
-  html += '<thead><tr>' + columns.map(c => `<th style="text-align: left; padding: 5px;">${c}</th>`).join('') + '</tr></thead>';
+  html += '<thead><tr>' + columns.map(c => `<th style="text-align: left; padding: 5px;">${escapeHtml(c)}</th>`).join('') + '</tr></thead>';
   html += '<tbody>';
   rows.forEach(r => {
-    html += '<tr>' + columns.map(c => `<td style="padding: 5px;">${r[c as keyof typeof r] ?? ''}</td>`).join('') + '</tr>';
+    html += '<tr>' + columns.map(c => `<td style="padding: 5px;">${escapeHtml(r[c as keyof typeof r])}</td>`).join('') + '</tr>';
   });
   html += '</tbody></table></body></html>';
 
@@ -193,9 +217,9 @@ async function exportToExcel(orders: Order[]) {
   const rows = buildExportRows(orders);
   if (rows.length === 0) return;
   const headers = Object.keys(rows[0]);
-  let table = '<table border="1"><thead><tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+  let table = '<table border="1"><thead><tr>' + headers.map(h => `<th>${escapeHtml(h)}</th>`).join('') + '</tr></thead><tbody>';
   rows.forEach(r => {
-    table += '<tr>' + headers.map(h => `<td>${r[h as keyof typeof r] ?? ''}</td>`).join('') + '</tr>';
+    table += '<tr>' + headers.map(h => `<td>${escapeHtml(r[h as keyof typeof r])}</td>`).join('') + '</tr>';
   });
   table += '</tbody></table>';
 
@@ -214,7 +238,7 @@ async function exportToCSV(orders: Order[]) {
   const headers = Object.keys(rows[0]);
   const csvContent = [
     headers.join(','),
-    ...rows.map(r => headers.map(h => `"${String(r[h as keyof typeof r] ?? '').replace(/"/g, '""')}"`).join(','))
+    ...rows.map(r => headers.map(h => csvCell(r[h as keyof typeof r])).join(','))
   ].join('\n');
 
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -253,10 +277,10 @@ async function exportToPDF(orders: Order[]) {
         <p>Generated: ${new Date().toLocaleString('en-GB')} — ${orders.length} orders</p>
         <table>
           <thead>
-            <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
+            <tr>${headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr>
           </thead>
           <tbody>
-            ${rows.map(r => `<tr>${headers.map(h => `<td>${r[h as keyof typeof r] ?? ''}</td>`).join('')}</tr>`).join('')}
+            ${rows.map(r => `<tr>${headers.map(h => `<td>${escapeHtml(r[h as keyof typeof r])}</td>`).join('')}</tr>`).join('')}
           </tbody>
         </table>
         <script>
@@ -267,6 +291,185 @@ async function exportToPDF(orders: Order[]) {
   `);
   printWindow.document.close();
 }
+
+// ── Table row ─────────────────────────────────────────────────
+//
+// Memoized: the page re-renders on every keystroke in the search box and the
+// manual-order form. Without this, each keystroke re-rendered every cell of
+// every loaded order (19 columns x up to hundreds of rows), which is what made
+// typing in this screen lag.
+
+interface OrderRowProps {
+  order: Order;
+  updating: boolean;
+  onView: (order: Order) => void;
+  onStatus: (orderId: string, status: string) => void;
+  onDelete: (orderId: string, orderNumber: string) => void;
+}
+
+const OrderRow = memo(function OrderRow({ order, updating, onView, onStatus, onDelete }: OrderRowProps) {
+  return (
+    <TableRow
+      className="border-white/[0.04] hover:bg-white/[0.02] transition-colors cursor-pointer"
+      onClick={() => onView(order)}
+    >
+      <TableCell className="px-5 py-3 text-[13px] text-white/70 font-mono whitespace-nowrap">
+        #{order.order_number}
+      </TableCell>
+      <TableCell className="px-5 py-3 text-[12px] text-white/30 tabular-nums whitespace-nowrap">
+        {new Date(order.created_at).toLocaleDateString('en-GB', {
+          day: '2-digit', month: 'short', year: 'numeric',
+        })}
+      </TableCell>
+      <TableCell className="px-5 py-3 whitespace-nowrap text-[13px] text-white/80">
+        {order.customer_name}
+      </TableCell>
+      <TableCell className="px-5 py-3 whitespace-nowrap text-[13px] text-white/40">
+        {order.customer_phone || '-'}
+      </TableCell>
+      <TableCell className="px-5 py-3 whitespace-nowrap text-[13px] text-white/40">
+        {order.customer_email || '-'}
+      </TableCell>
+      <TableCell className="px-5 py-3 text-[13px] text-white/40 whitespace-nowrap">
+        {order.governorate || '-'}
+      </TableCell>
+      <TableCell className="px-5 py-3 text-[13px] text-white/40 whitespace-nowrap">
+        {order.shipping_address?.city || '-'}
+      </TableCell>
+      <TableCell className="px-5 py-3 text-[13px] text-white/70 min-w-[220px]">
+        {order.shipping_address?.address || '-'}
+      </TableCell>
+      <TableCell className="px-5 py-3 whitespace-nowrap text-[13px]">
+        {order.shipping_address?.lat && order.shipping_address?.lng ? (
+          <a
+            href={`https://www.google.com/maps?q=${order.shipping_address.lat},${order.shipping_address.lng}`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-blue-400 underline hover:text-blue-300 font-medium"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Maps
+          </a>
+        ) : (
+          '-'
+        )}
+      </TableCell>
+
+      {/* Items column */}
+      <TableCell className="px-5 py-3 min-w-[260px]">
+        <div className="flex flex-col gap-1.5">
+          {(order.items ?? []).map((item, i) => {
+            const attrs = renderItemAttrs(item);
+            return (
+              <div key={i} className="flex items-start gap-1.5">
+                <span className="text-[11px] text-white/30 tabular-nums shrink-0 mt-px">
+                  ×{item.quantity}
+                </span>
+                <div>
+                  <span className="text-[12px] text-white/70">
+                    {item.name}
+                  </span>
+                  {attrs && (
+                    <span className="text-[11px] text-white/30 ml-1">
+                      ({attrs})
+                    </span>
+                  )}
+                  <span className="text-[11px] text-white/30 ml-1 tabular-nums">
+                    — {(item.price * item.quantity).toLocaleString()} {order.currency}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </TableCell>
+
+      <TableCell className="px-5 py-3 text-right text-[13px] text-white/40 tabular-nums">
+        {(order.subtotal ?? 0).toLocaleString()}
+      </TableCell>
+      <TableCell className="px-5 py-3 text-right text-[13px] text-white/40 tabular-nums">
+        {(order.shipping_cost ?? 0).toLocaleString()}
+      </TableCell>
+      <TableCell className="px-5 py-3 text-right text-[13px] text-white/40 tabular-nums">
+        {(order.cod_fee ?? 0).toLocaleString()}
+      </TableCell>
+      <TableCell className="px-5 py-3 text-right text-[13px] font-semibold text-white tabular-nums whitespace-nowrap">
+        {order.total.toLocaleString()} {order.currency}
+      </TableCell>
+      <TableCell className="px-5 py-3 whitespace-nowrap text-[13px] text-white/40 capitalize">
+        {order.payment_method === 'cashOnDelivery' ? 'COD' : 'InstaPay'}
+      </TableCell>
+      <TableCell className="px-5 py-3 whitespace-nowrap text-[13px] text-white/40">
+        {order.payment_status === 'proof_uploaded' || order.payment_status === 'proof uploaded' || order.payment_status === 'image' ? (
+          order.payment_screenshot ? (
+            <a
+              href={order.payment_screenshot}
+              target="_blank"
+              rel="noreferrer"
+              className="text-blue-400 underline hover:text-blue-300 font-medium"
+              onClick={(e) => e.stopPropagation()}
+            >
+              image
+            </a>
+          ) : (
+            <span className="text-blue-400 underline font-medium">image</span>
+          )
+        ) : (
+          '-'
+        )}
+      </TableCell>
+      <TableCell className="px-5 py-3 text-[12px] text-white/40">
+        {renderNotesWithLinks(order.notes)}
+      </TableCell>
+
+      {/* Status dropdown */}
+      <TableCell className="px-5 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            disabled={updating}
+            className={`h-7 px-2.5 text-[11px] font-medium rounded border ${STATUS_COLOR[order.status] ?? STATUS_COLOR.pending} hover:opacity-80 inline-flex items-center justify-center cursor-pointer transition-colors`}
+          >
+            {updating
+              ? <Loader2 className="h-3 w-3 animate-spin" />
+              : <>{order.status}<ChevronDown className="h-3 w-3 ml-1" /></>
+            }
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="bg-[#111] border-white/[0.08]">
+            {STATUSES.map(s => (
+              <DropdownMenuItem
+                key={s}
+                onClick={() => onStatus(order.id, s)}
+                className="text-white/70 hover:text-white focus:text-white focus:bg-white/[0.04] text-[13px] capitalize cursor-pointer"
+              >
+                {s}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </TableCell>
+
+      {/* Actions */}
+      <TableCell className="px-5 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-1">
+          <Button
+            size="icon" variant="ghost"
+            onClick={() => onView(order)}
+            className="h-7 w-7 text-white/30 hover:text-white hover:bg-white/[0.04]"
+          >
+            <Eye className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            size="icon" variant="ghost"
+            onClick={() => onDelete(order.id, order.order_number)}
+            className="h-7 w-7 text-white/30 hover:text-red-400 hover:bg-red-500/10"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+});
 
 // ── Page ──────────────────────────────────────────────────────
 
@@ -354,7 +557,7 @@ export default function AdminOrdersPage() {
 
   // ── Status update ────────────────────────────────────────
 
-  const updateStatus = async (orderId: string, newStatus: string) => {
+  const updateStatus = useCallback(async (orderId: string, newStatus: string) => {
     setUpdatingId(orderId);
     const toastId = toast.loading('Updating status…');
     try {
@@ -372,11 +575,11 @@ export default function AdminOrdersPage() {
     } finally {
       setUpdatingId(null);
     }
-  };
+  }, []);
 
   // ── Delete ───────────────────────────────────────────────
 
-  const deleteOrder = async (orderId: string, orderNumber: string) => {
+  const deleteOrder = useCallback(async (orderId: string, orderNumber: string) => {
     if (!confirm(`Delete order #${orderNumber}? This will permanently remove it from the database.`)) return;
     const toastId = toast.loading('Deleting order…');
     try {
@@ -392,7 +595,7 @@ export default function AdminOrdersPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to delete', { id: toastId });
     }
-  };
+  }, []);
 
   // ── Export ───────────────────────────────────────────────
 
@@ -508,13 +711,54 @@ export default function AdminOrdersPage() {
 
   // ── Filtered orders ──────────────────────────────────────
 
-  const searchLower = search.toLowerCase();
-  const filtered = orders.filter(
-    (o) =>
-      o.order_number.toLowerCase().includes(searchLower) ||
-      o.customer_name.toLowerCase().includes(searchLower) ||
-      (o.customer_phone ?? '').includes(search),
-  );
+  // Cheap (a substring test per loaded order); the expensive part — rendering
+  // the rows — is what OrderRow's memo avoids.
+  const needle = search.trim().toLowerCase();
+  const filtered = needle
+    ? orders.filter(
+        (o) =>
+          o.order_number.toLowerCase().includes(needle) ||
+          o.customer_name.toLowerCase().includes(needle) ||
+          (o.customer_phone ?? '').includes(needle),
+      )
+    : orders;
+
+  // Only the newest page(s) are in memory, so a search that looked only at
+  // them silently missed older orders. After a short pause the server is asked
+  // too, and any matches it finds are merged into the list.
+  useEffect(() => {
+    const term = search.trim();
+    if (term.length < 2) return;
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/orders?page=1&pageSize=${PAGE_SIZE}&q=${encodeURIComponent(term)}`,
+          { signal: controller.signal },
+        );
+        const data: OrdersPageResponse = await res.json();
+        const found = data.orders ?? [];
+        if (!data.success || found.length === 0) return;
+
+        setOrders((prev) => {
+          const known = new Set(prev.map((o) => o.id));
+          const fresh = found.filter((o) => !known.has(o.id));
+          if (fresh.length === 0) return prev;
+          return [...prev, ...fresh].sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+          );
+        });
+      } catch {
+        /* aborted or offline — the local filter still applies */
+      }
+    }, 350);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [search]);
 
   // ── Loading ───────────────────────────────────────────────
 
@@ -644,166 +888,14 @@ export default function AdminOrdersPage() {
                 </TableHeader>
                 <TableBody>
                   {filtered.map((order) => (
-                    <TableRow
+                    <OrderRow
                       key={order.id}
-                      className="border-white/[0.04] hover:bg-white/[0.02] transition-colors cursor-pointer"
-                      onClick={() => setViewOrder(order)}
-                    >
-                      <TableCell className="px-5 py-3 text-[13px] text-white/70 font-mono whitespace-nowrap">
-                        #{order.order_number}
-                      </TableCell>
-                      <TableCell className="px-5 py-3 text-[12px] text-white/30 tabular-nums whitespace-nowrap">
-                        {new Date(order.created_at).toLocaleDateString('en-GB', {
-                          day: '2-digit', month: 'short', year: 'numeric',
-                        })}
-                      </TableCell>
-                      <TableCell className="px-5 py-3 whitespace-nowrap text-[13px] text-white/80">
-                        {order.customer_name}
-                      </TableCell>
-                      <TableCell className="px-5 py-3 whitespace-nowrap text-[13px] text-white/40">
-                        {order.customer_phone || '-'}
-                      </TableCell>
-                      <TableCell className="px-5 py-3 whitespace-nowrap text-[13px] text-white/40">
-                        {order.customer_email || '-'}
-                      </TableCell>
-                      <TableCell className="px-5 py-3 text-[13px] text-white/40 whitespace-nowrap">
-                        {order.governorate || '-'}
-                      </TableCell>
-                      <TableCell className="px-5 py-3 text-[13px] text-white/40 whitespace-nowrap">
-                        {order.shipping_address?.city || '-'}
-                      </TableCell>
-                      <TableCell className="px-5 py-3 text-[13px] text-white/70 min-w-[220px]">
-                        {order.shipping_address?.address || '-'}
-                      </TableCell>
-                      <TableCell className="px-5 py-3 whitespace-nowrap text-[13px]">
-                        {order.shipping_address?.lat && order.shipping_address?.lng ? (
-                          <a
-                            href={`https://www.google.com/maps?q=${order.shipping_address.lat},${order.shipping_address.lng}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-blue-400 underline hover:text-blue-300 font-medium"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            Maps
-                          </a>
-                        ) : (
-                          '-'
-                        )}
-                      </TableCell>
-
-                      {/* Items column */}
-                      <TableCell className="px-5 py-3 min-w-[260px]">
-                        <div className="flex flex-col gap-1.5">
-                          {(order.items ?? []).map((item, i) => {
-                            const attrs = renderItemAttrs(item);
-                            return (
-                              <div key={i} className="flex items-start gap-1.5">
-                                <span className="text-[11px] text-white/30 tabular-nums shrink-0 mt-px">
-                                  ×{item.quantity}
-                                </span>
-                                <div>
-                                  <span className="text-[12px] text-white/70">
-                                    {item.name}
-                                  </span>
-                                  {attrs && (
-                                    <span className="text-[11px] text-white/30 ml-1">
-                                      ({attrs})
-                                    </span>
-                                  )}
-                                  <span className="text-[11px] text-white/30 ml-1 tabular-nums">
-                                    — {(item.price * item.quantity).toLocaleString()} {order.currency}
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </TableCell>
-
-                      <TableCell className="px-5 py-3 text-right text-[13px] text-white/40 tabular-nums">
-                        {(order.subtotal ?? 0).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="px-5 py-3 text-right text-[13px] text-white/40 tabular-nums">
-                        {(order.shipping_cost ?? 0).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="px-5 py-3 text-right text-[13px] text-white/40 tabular-nums">
-                        {(order.cod_fee ?? 0).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="px-5 py-3 text-right text-[13px] font-semibold text-white tabular-nums whitespace-nowrap">
-                        {order.total.toLocaleString()} {order.currency}
-                      </TableCell>
-                      <TableCell className="px-5 py-3 whitespace-nowrap text-[13px] text-white/40 capitalize">
-                        {order.payment_method === 'cashOnDelivery' ? 'COD' : 'InstaPay'}
-                      </TableCell>
-                      <TableCell className="px-5 py-3 whitespace-nowrap text-[13px] text-white/40">
-                        {order.payment_status === 'proof_uploaded' || order.payment_status === 'proof uploaded' || order.payment_status === 'image' ? (
-                          order.payment_screenshot ? (
-                            <a
-                              href={order.payment_screenshot}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-blue-400 underline hover:text-blue-300 font-medium"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              image
-                            </a>
-                          ) : (
-                            <span className="text-blue-400 underline font-medium">image</span>
-                          )
-                        ) : (
-                          '-'
-                        )}
-                      </TableCell>
-                      <TableCell className="px-5 py-3 text-[12px] text-white/40">
-                        {renderNotesWithLinks(order.notes)}
-                      </TableCell>
-
-                      {/* Status dropdown */}
-                      <TableCell className="px-5 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger
-                            disabled={updatingId === order.id}
-                            className={`h-7 px-2.5 text-[11px] font-medium rounded border ${STATUS_COLOR[order.status] ?? STATUS_COLOR.pending} hover:opacity-80 inline-flex items-center justify-center cursor-pointer transition-colors`}
-                          >
-                            {updatingId === order.id
-                              ? <Loader2 className="h-3 w-3 animate-spin" />
-                              : <>{order.status}<ChevronDown className="h-3 w-3 ml-1" /></>
-                            }
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent className="bg-[#111] border-white/[0.08]">
-                            {STATUSES.map(s => (
-                              <DropdownMenuItem
-                                key={s}
-                                onClick={() => updateStatus(order.id, s)}
-                                className="text-white/70 hover:text-white focus:text-white focus:bg-white/[0.04] text-[13px] capitalize cursor-pointer"
-                              >
-                                {s}
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-
-                      {/* Actions */}
-                      <TableCell className="px-5 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            size="icon" variant="ghost"
-                            onClick={() => setViewOrder(order)}
-                            className="h-7 w-7 text-white/30 hover:text-white hover:bg-white/[0.04]"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            size="icon" variant="ghost"
-                            onClick={() => deleteOrder(order.id, order.order_number)}
-                            className="h-7 w-7 text-white/30 hover:text-red-400 hover:bg-red-500/10"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                      order={order}
+                      updating={updatingId === order.id}
+                      onView={setViewOrder}
+                      onStatus={updateStatus}
+                      onDelete={deleteOrder}
+                    />
                   ))}
                 </TableBody>
               </Table>

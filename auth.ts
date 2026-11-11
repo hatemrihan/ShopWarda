@@ -1,82 +1,59 @@
-import { getServerSession } from 'next-auth';
-import { getToken } from 'next-auth/jwt';
-import { cookies, headers } from 'next/headers';
+import { cache } from 'react';
+import { cookies } from 'next/headers';
+import { decode } from 'next-auth/jwt';
+import type { Session } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 
 export { authOptions };
 
+const SESSION_COOKIES = [
+  '__Secure-next-auth.session-token',
+  'next-auth.session-token',
+] as const;
+
 /**
- * Helper to get the server session in server components / API routes.
- * Falls back to reading the JWT token directly if getServerSession fails.
+ * The current admin session, or null.
+ *
+ * Reads and verifies the NextAuth JWT cookie directly. This replaces a chain
+ * that called `getServerSession`, fell back to `getToken`, and on the way
+ * logged the decoded token, every cookie name and the first characters of the
+ * signing secret on *every* admin request. Four routes also carried their own
+ * copy of the check.
+ *
+ * Wrapped in React `cache`, so a page that needs the session in its layout,
+ * its data loader and a server action verifies the cookie once per request.
  */
-export async function auth() {
-  console.log('[AUTH-HELPER] auth() called');
+export const auth = cache(async (): Promise<Session | null> => {
+  const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
+  if (!secret) return null;
 
-  // Try getServerSession first
-  try {
-    const session = await getServerSession(authOptions);
-    console.log('[AUTH-HELPER] getServerSession result:', JSON.stringify(session));
-    if (session?.user?.adminId) {
-      console.log('[AUTH-HELPER] Session found via getServerSession, adminId:', session.user.adminId);
-      return session;
-    }
-    console.log('[AUTH-HELPER] getServerSession returned no adminId, trying JWT fallback');
-  } catch (err) {
-    console.error('[AUTH-HELPER] getServerSession threw error:', err);
-  }
-
-  // Fallback: read JWT token directly from cookies
   try {
     const cookieStore = await cookies();
-    const allCookies = cookieStore.getAll();
-    console.log('[AUTH-HELPER] All cookies:', allCookies.map(c => c.name).join(', '));
-    
-    const nextAuthCookie = allCookies.find(c => 
-      c.name === 'next-auth.session-token' || 
-      c.name === '__Secure-next-auth.session-token'
-    );
-    console.log('[AUTH-HELPER] NextAuth session cookie found:', !!nextAuthCookie);
+    const sessionToken = SESSION_COOKIES.map((name) => cookieStore.get(name)?.value).find(Boolean);
+    if (!sessionToken) return null;
 
-    if (!nextAuthCookie) {
-      console.log('[AUTH-HELPER] No session cookie — user not logged in');
-      return null;
-    }
+    // `decode` verifies the signature and expiry; a tampered or expired
+    // cookie throws or yields null.
+    const token = await decode({ token: sessionToken, secret });
+    if (!token?.adminId) return null;
 
-    const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || '';
-    console.log('[AUTH-HELPER] Using secret (first 5 chars):', secret.substring(0, 5));
+    const expires =
+      typeof token.exp === 'number'
+        ? new Date(token.exp * 1000).toISOString()
+        : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-    const headerStore = await headers();
-    
-    const token = await getToken({
-      req: {
-        cookies: Object.fromEntries(allCookies.map(c => [c.name, c.value])),
-        headers: Object.fromEntries(headerStore.entries()),
-      } as unknown as Parameters<typeof getToken>[0]['req'],
-      secret,
-    });
-
-    console.log('[AUTH-HELPER] getToken result:', JSON.stringify(token));
-
-    if (token?.adminId) {
-      console.log('[AUTH-HELPER] Token found with adminId:', token.adminId);
-      return {
-        user: {
-          id: token.sub || '',
-          email: (token.email as string) || '',
-          name: (token.name as string) || '',
-          image: token.picture as string | undefined,
-          adminId: token.adminId as string,
-          role: (token.role as string) || 'owner',
-        },
-        expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      };
-    }
-
-    console.log('[AUTH-HELPER] Token found but no adminId');
-  } catch (err) {
-    console.error('[AUTH-HELPER] JWT fallback error:', err);
+    return {
+      user: {
+        id: token.sub ?? '',
+        email: (token.email as string | undefined) ?? '',
+        name: (token.name as string | undefined) ?? '',
+        image: (token.picture as string | undefined) ?? undefined,
+        adminId: token.adminId,
+        role: token.role ?? 'owner',
+      },
+      expires,
+    };
+  } catch {
+    return null;
   }
-
-  console.log('[AUTH-HELPER] Returning null — no valid session');
-  return null;
-}
+});

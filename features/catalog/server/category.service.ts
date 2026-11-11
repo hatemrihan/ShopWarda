@@ -59,6 +59,24 @@ export const categoryService = {
     return category;
   },
 
+  /**
+   * Cached storefront lookup. Misses (and old-slug redirects) are not cached,
+   * mirroring productService.getBySlug.
+   */
+  async getBySlugCached(slug: string): Promise<CategoryDTO> {
+    const cached = unstable_cache(
+      () => categoryRepository.findBySlug(slug),
+      ['category-by-slug', slug],
+      {
+        tags: [CACHE_TAGS.CATEGORIES, CACHE_TAGS.category(slug)],
+        revalidate: CATALOG_REVALIDATE_SECONDS,
+      },
+    );
+    const category = await cached();
+    if (category) return category;
+    return this.getBySlug(slug);
+  },
+
   async getBySlug(slug: string): Promise<CategoryDTO> {
     const category = await categoryRepository.findBySlug(slug);
     if (category) return category;

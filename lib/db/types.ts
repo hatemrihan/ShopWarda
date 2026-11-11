@@ -1,4 +1,6 @@
-import { Types } from 'mongoose';
+// Type-only: this module is also imported by client components for its status
+// constants, and a value import would drag mongoose into the browser bundle.
+import type { Types } from 'mongoose';
 
 // ─── Status Enums ───────────────────────────────────────────────
 

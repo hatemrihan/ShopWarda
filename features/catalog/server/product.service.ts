@@ -68,14 +68,25 @@ function checkVariantUniqueness(variants: CreateProductInput['variants']) {
  * Validate categories exist and are active.
  */
 async function validateCategoryIds(categoryIds: string[]): Promise<void> {
-  for (const catId of categoryIds) {
-    const cat = await categoryRepository.findById(catId);
-    if (!cat || cat.status === 'archived') {
-      throw new ValidationError(`Category ${catId} not found or archived`, {
-        categoryIds: ['One or more categories are invalid'],
-      });
-    }
+  // One query for all of them (was a sequential lookup per category).
+  const usable = await categoryRepository.countUsable(categoryIds);
+  if (usable !== new Set(categoryIds).size) {
+    throw new ValidationError('One or more categories no longer exist or are archived', {
+      categoryIds: ['One or more categories are invalid'],
+    });
   }
+}
+
+/** Order-independent identity of a variant's option combination. */
+function optionSignature(optionValues: { name: string; value: string }[]): string {
+  return optionValues
+    .map((ov) => `${slugKey(ov.name)}:${slugKey(ov.value)}`)
+    .sort()
+    .join('|');
+}
+
+function slugKey(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, '-');
 }
 
 // ─── Service ────────────────────────────────────────────────────
@@ -135,12 +146,45 @@ export const productService = {
     const product = await this.findBySlugCached(slug);
     if (product) return product;
 
-    const newSlug = await productRepository.findByPreviousSlug(slug);
-    if (newSlug) {
+    // Old slug, or a link that only knew the product's id (bags saved before
+    // slugs were stored link this way).
+    const newSlug =
+      (await productRepository.findByPreviousSlug(slug)) ??
+      (await productRepository.findSlugById(slug));
+    if (newSlug && newSlug !== slug) {
       throw Object.assign(new NotFoundError('Product', slug), { redirectSlug: newSlug });
     }
 
     throw new NotFoundError('Product', slug);
+  },
+
+  /** A few other active products for the "more from this collection" strip. */
+  async listRelatedCached(productId: string, categoryIds: string[], limit = 4): Promise<ProductListItem[]> {
+    const cached = unstable_cache(
+      async () => {
+        const pick = async (filter: ProductFilter) =>
+          (
+            await productRepository.findAll(
+              { status: 'active', sortBy: 'createdAt', sortOrder: 'desc', ...filter },
+              { page: 1, pageSize: limit + 1 },
+            )
+          ).items.filter((item) => item.id !== productId);
+
+        // Same categories first; top up from the rest of the shop.
+        const related = categoryIds.length ? await pick({ categoryIds }) : [];
+        if (related.length < limit) {
+          const seen = new Set(related.map((r) => r.id));
+          for (const item of await pick({})) {
+            if (related.length >= limit) break;
+            if (!seen.has(item.id)) related.push(item);
+          }
+        }
+        return related.slice(0, limit);
+      },
+      ['product-related', productId, categoryIds.join(','), String(limit)],
+      { tags: [CACHE_TAGS.PRODUCTS], revalidate: CATALOG_REVALIDATE_SECONDS },
+    );
+    return cached();
   },
 
   async create(input: CreateProductInput): Promise<ProductDTO> {
@@ -152,10 +196,6 @@ export const productService = {
         details[path] = details[path] ?? [];
         details[path].push(issue.message);
       }
-      console.error('[ProductService] Validation failed:', JSON.stringify(details, null, 2));
-      console.error('[ProductService] Input keys:', Object.keys(input));
-      console.error('[ProductService] Variants:', JSON.stringify(input.variants?.map(v => ({ sku: v.sku, price: v.pricePiasters, compareAt: v.compareAtPricePiasters, isDefault: v.isDefault })), null, 2));
-      if (input.media) console.error('[ProductService] Media:', JSON.stringify(input.media, null, 2));
       throw new ValidationError('Invalid product data', details);
     }
 
@@ -207,7 +247,7 @@ export const productService = {
         lowStockThreshold: v.lowStockThreshold,
         trackInventory: v.trackInventory,
         weightGrams: v.weight,
-        status: v.isActive ? 'active' : 'inactive',
+        status: v.isActive ? 'active' : 'disabled',
       })),
       media: data.media?.map((m, i) => ({
         assetKey: m.assetKey,
@@ -274,7 +314,25 @@ export const productService = {
     // Variant uniqueness check
     if (data.variants) {
       checkVariantUniqueness(data.variants);
+
+      // Keep each surviving variant's id. The array used to be replaced with
+      // brand-new subdocuments on every save, so merely editing a product's
+      // description gave all of its variants new ids — orphaning every bag
+      // that held one and every order that referenced one.
+      const bySku = new Map(existing.variants.map((v) => [v.sku, v.id]));
+      const bySignature = new Map(
+        existing.variants.map((v) => [optionSignature(v.optionValues), v.id]),
+      );
+      const claimed = new Set<string>();
+      const carriedId = (v: (typeof data.variants)[number]): string | undefined => {
+        const id = bySku.get(v.sku) ?? bySignature.get(optionSignature(v.optionValues));
+        if (!id || claimed.has(id)) return undefined;
+        claimed.add(id);
+        return id;
+      };
+
       updateData.variants = data.variants.map((v) => ({
+        _id: carriedId(v),
         sku: v.sku,
         optionValues: v.optionValues.map((ov) => ({
           optionKey: ov.name.toLowerCase().replace(/\s+/g, '-'),
@@ -282,11 +340,12 @@ export const productService = {
         })),
         priceMinor: v.pricePiasters,
         compareAtPriceMinor: v.compareAtPricePiasters,
+        costPriceMinor: v.costPiasters,
         stock: v.stock,
         lowStockThreshold: v.lowStockThreshold,
         trackInventory: v.trackInventory,
         weightGrams: v.weight,
-        status: v.isActive ? 'active' : 'inactive',
+        status: v.isActive ? 'active' : 'disabled',
       }));
     }
 

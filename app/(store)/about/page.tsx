@@ -1,4 +1,3 @@
-import Image from 'next/image';
 import { WhoWeAreSection } from '@/components/sections/who-we-are';
 
 export const metadata = {

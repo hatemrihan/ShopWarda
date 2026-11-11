@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter, Playfair_Display } from 'next/font/google';
 import { Toaster } from 'sonner';
 import './globals.css';
+import { getSiteUrl } from '@/lib/site';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -31,11 +32,7 @@ export const metadata: Metadata = {
       { url: '/images/logo.png', type: 'image/png' },
     ],
   },
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_VERCEL_URL
-      ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-      : 'http://localhost:3000'
-  ),
+  metadataBase: new URL(getSiteUrl()),
   openGraph: {
     type: 'website',
     locale: 'en_US',
@@ -53,7 +50,6 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-import Providers from './providers';
 
 export default function RootLayout({
   children,
@@ -63,9 +59,7 @@ export default function RootLayout({
   return (
     <html lang="en" dir="ltr" suppressHydrationWarning>
       <body className={`${inter.variable} ${playfair.variable} font-sans antialiased`}>
-        <Providers>
-          {children}
-        </Providers>
+        {children}
         <Toaster position="top-center" richColors closeButton />
       </body>
     </html>

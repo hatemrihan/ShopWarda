@@ -9,10 +9,16 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 interface ProductCardProps {
   product: ProductListItem;
+  /** Load eagerly — set for the first row of a grid, which is above the fold. */
+  priority?: boolean;
 }
 
-export function ProductCard({ product }: ProductCardProps) {
-  const [imageLoaded, setImageLoaded] = useState(false);
+export function ProductCard({ product, priority = false }: ProductCardProps) {
+  // 'loading' → 'loaded' | 'failed'. A failed image used to leave the card
+  // pulsing as a skeleton forever, with the photo held at opacity 0.
+  const [imageState, setImageState] = useState<'loading' | 'loaded' | 'failed'>('loading');
+
+  const showImage = product.primaryImageUrl && imageState !== 'failed';
 
   return (
     <Link
@@ -20,23 +26,25 @@ export function ProductCard({ product }: ProductCardProps) {
       className="group block space-y-3"
     >
       <div className="relative aspect-[3/4] w-full overflow-hidden bg-transparent flex items-center justify-center">
-        {product.primaryImageUrl ? (
+        {showImage ? (
           <>
             {/* Skeleton placeholder until image loads */}
-            {!imageLoaded && (
+            {imageState === 'loading' && (
               <Skeleton className="absolute inset-0 bg-neutral-100/60" />
             )}
             <Image
-              src={product.primaryImageUrl}
+              src={product.primaryImageUrl!}
               alt={product.name}
               fill
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 25vw"
+              priority={priority}
+              sizes="(max-width: 768px) 50vw, 25vw"
               className={`
                 object-contain transition-transform duration-500 ease-out
                 group-hover:scale-105
-                ${imageLoaded ? 'opacity-100' : 'opacity-0'}
+                ${imageState === 'loaded' ? 'opacity-100' : 'opacity-0'}
               `}
-              onLoad={() => setImageLoaded(true)}
+              onLoad={() => setImageState('loaded')}
+              onError={() => setImageState('failed')}
             />
           </>
         ) : (
@@ -51,11 +59,11 @@ export function ProductCard({ product }: ProductCardProps) {
         </h3>
         <p className="text-[13px] font-normal text-neutral-600 tracking-wide">
           {piastersToCurrency(product.pricePiasters)}
-          {product.maxPricePiasters && (
+          {product.maxPricePiasters ? (
             <span className="text-neutral-400 font-light">
               {' '}– {piastersToCurrency(product.maxPricePiasters)}
             </span>
-          )}
+          ) : null}
         </p>
       </div>
     </Link>

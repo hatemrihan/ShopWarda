@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import Image from 'next/image';
+import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -17,8 +18,14 @@ interface PaymentMethodSelectorProps {
     accountLink: string;
     instructions: string;
   };
+  /** Called with the uploaded proof's key, or '' when the upload is cleared/failed. */
   onScreenshotUpload?: (assetKey: string) => void;
+  /** Lets the checkout block "place order" while a proof is still uploading. */
+  onUploadingChange?: (uploading: boolean) => void;
 }
+
+const ACCEPTED_PROOF_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_PROOF_BYTES = 10 * 1024 * 1024;
 
 export function PaymentMethodSelector({
   value,
@@ -28,6 +35,7 @@ export function PaymentMethodSelector({
   codFee,
   instaPayConfig,
   onScreenshotUpload,
+  onUploadingChange,
 }: PaymentMethodSelectorProps) {
   const [uploading, setUploading] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<string | null>(null);
@@ -36,15 +44,35 @@ export function PaymentMethodSelector({
 
   const handleScreenshotUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    // Reset the input so choosing the same file again (after a failure) still
+    // fires a change event.
+    e.target.value = '';
     if (!file) return;
+
+    // Check before uploading. `accept="image/*"` let iPhones offer HEIC, which
+    // was uploaded in full only to be refused by the server with a raw
+    // "Unsupported file type: image/heic" in a browser alert.
+    if (!ACCEPTED_PROOF_TYPES.includes(file.type)) {
+      toast.error('Please upload a JPG, PNG or WEBP image (a screenshot works best).');
+      return;
+    }
+    if (file.size > MAX_PROOF_BYTES) {
+      toast.error('That image is larger than 10MB. Please choose a smaller one.');
+      return;
+    }
 
     // Show instant local preview
     const reader = new FileReader();
     reader.onloadend = () => setScreenShotPreview(reader.result as string);
     reader.readAsDataURL(file);
 
+    // A new upload replaces any earlier proof.
+    setUploadedFile(null);
+    onScreenshotUpload?.('');
+
     try {
       setUploading(true);
+      onUploadingChange?.(true);
 
       const formData = new FormData();
       formData.append('file', file);
@@ -63,9 +91,12 @@ export function PaymentMethodSelector({
       onScreenshotUpload?.(data.assetKey);
     } catch (err) {
       console.error('Screenshot upload failed:', err);
-      alert(err instanceof Error ? err.message : 'Failed to upload screenshot. Please try again.');
+      // Do not leave a preview on screen for a file that never reached us.
+      setScreenShotPreview(null);
+      toast.error(err instanceof Error ? err.message : 'Failed to upload screenshot. Please try again.');
     } finally {
       setUploading(false);
+      onUploadingChange?.(false);
     }
   };
 
@@ -165,7 +196,7 @@ export function PaymentMethodSelector({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp"
                   onChange={handleScreenshotUpload}
                   className="hidden"
                 />

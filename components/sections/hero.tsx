@@ -3,43 +3,37 @@
 import { useEffect, useRef } from 'react';
 
 export function HeroSection() {
-  const mobileVideoRef = useRef<HTMLVideoElement>(null);
-  const desktopVideoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Auto-play videos
+  // Some browsers ignore the autoplay attribute until asked explicitly.
   useEffect(() => {
-    mobileVideoRef.current?.play().catch(() => { });
-    desktopVideoRef.current?.play().catch(() => { });
+    videoRef.current?.play().catch(() => { });
   }, []);
 
   return (
     <section className="hero-section">
-      {/* ── Mobile: video ────────────────────────────── */}
-      <div className="hero-media hero-media--mobile">
-        <video
-          ref={mobileVideoRef}
-          src="/videos/wow.mp4"
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="auto"
-          className="hero-media__video"
-        />
-      </div>
+      {/*
+        One <video>, two sources. The browser picks the first source whose
+        media query matches and downloads only that file.
 
-      {/* ── Desktop: video ───────────────────────────── */}
-      <div className="hero-media hero-media--desktop">
+        There used to be two <video> elements — one per breakpoint, the other
+        hidden with CSS. `display: none` does not stop a preload="auto" video
+        from downloading, so every visitor fetched both clips (phones pulled
+        the desktop one too) before the page was usable.
+      */}
+      <div className="hero-media">
         <video
-          ref={desktopVideoRef}
-          src="/videos/laptop.mp4"
+          ref={videoRef}
           autoPlay
           loop
           muted
           playsInline
           preload="auto"
           className="hero-media__video"
-        />
+        >
+          <source src="/videos/laptop.mp4" type="video/mp4" media="(min-width: 768px)" />
+          <source src="/videos/wow.mp4" type="video/mp4" />
+        </video>
       </div>
 
       {/* ── Bottom text ──────────────────────────────── */}
@@ -65,17 +59,11 @@ export function HeroSection() {
           }
         }
 
-        /* ── Media layers ── */
+        /* ── Media layer ── */
         .hero-media {
           position: absolute;
           inset: 0;
           z-index: 0;
-        }
-        .hero-media--mobile { display: block; }
-        .hero-media--desktop { display: none; }
-        @media (min-width: 768px) {
-          .hero-media--mobile { display: none; }
-          .hero-media--desktop { display: block; }
         }
         .hero-media__video {
           width: 100%;

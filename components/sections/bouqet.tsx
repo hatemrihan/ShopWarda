@@ -28,8 +28,10 @@ export function BouquetShowcase({ flowers, wraps, settings }: BouquetShowcasePro
   const activeFlowers = flowers.filter((f) => f.selectable);
   const activeWraps = wraps.filter((w) => w.available);
 
-  // Static editorial hero image
-  const DesignImage = '/images/design-image.avif';
+  // Static editorial hero image. If it cannot be loaded, fall back to the
+  // other bouquet photo rather than leaving a blank, permanently pulsing panel.
+  const [imgSrc, setImgSrc] = useState('/images/design-image.avif');
+  const FALLBACK_IMAGE = '/images/bouquet-hero.jpg';
 
   // Dynamic body text from admin
   const details: string[] = [];
@@ -56,11 +58,14 @@ export function BouquetShowcase({ flowers, wraps, settings }: BouquetShowcasePro
               <div className="absolute inset-0 bg-[#f0ece6] animate-pulse" />
             )}
             <Image
-              src={DesignImage}
+              src={imgSrc}
               alt="Build your own bouquet"
               fill
               sizes="(max-width: 1024px) 100vw, 60vw"
-              priority
+              onError={() => {
+                if (imgSrc !== FALLBACK_IMAGE) setImgSrc(FALLBACK_IMAGE);
+                else setImgLoaded(true);
+              }}
               className={`object-cover transition-opacity duration-700 ${imgLoaded ? 'opacity-100' : 'opacity-0'
                 }`}
               onLoad={() => setImgLoaded(true)}

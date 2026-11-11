@@ -5,7 +5,9 @@ import { sendOrderConfirmationEmail, sendAdminOrderNotification } from '@/lib/em
 import { guardAdmin, getClientIp } from '@/lib/auth/api-guard';
 import { checkRateLimit, checkoutLimiter } from '@/lib/security/rate-limit';
 import { RateLimitError, ValidationError } from '@/lib/errors';
-import { ORDER_STATUS } from '@/lib/db/types';
+import { isValidObjectId } from 'mongoose';
+import { requireAdmin } from '@/lib/auth/require-admin';
+import { toAdminStatus, toStoredStatus } from '@/features/checkout/order-status';
 import { orderService, type PlaceOrderInput } from '@/features/checkout/server/order.service';
 import { captureException } from '@/lib/observability';
 import { generatePresignedReadUrl } from '@/lib/storage/provider';
@@ -184,10 +186,21 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, Number(params.get('page')) || 1);
     const pageSize = Math.min(200, Math.max(1, Number(params.get('pageSize')) || 50));
     // Only accept a real status; anything else is treated as "no filter".
-    const statusParam = params.get('status');
-    const statusFilter = ORDER_STATUS.find((s) => s === statusParam);
+    const statusFilter = toStoredStatus(params.get('status'));
 
     const query: Record<string, unknown> = statusFilter ? { status: statusFilter } : {};
+
+    // Server-side search, so it covers every order — not just the pages the
+    // admin happens to have loaded.
+    const search = params.get('q')?.trim().slice(0, 100);
+    if (search) {
+      const pattern = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      query.$or = [
+        { orderNumber: pattern },
+        { 'guest.name': pattern },
+        { 'guest.phone': pattern },
+      ];
+    }
 
     const [orders, total] = await Promise.all([
       Order.find(query)
@@ -202,9 +215,10 @@ export async function GET(req: NextRequest) {
       // Generate presigned URL for payment proof if it exists and is an S3 key
       let paymentScreenshot: string | null = null;
       if (o.payment?.instaPayAssetKey) {
-        if (o.payment.instaPayAssetKey.startsWith('http')) {
+        if (/^https:\/\//i.test(o.payment.instaPayAssetKey)) {
+          // Legacy rows stored a full URL. Only https is ever linked.
           paymentScreenshot = o.payment.instaPayAssetKey;
-        } else {
+        } else if (o.payment.instaPayAssetKey.startsWith('proofs/')) {
           try {
             paymentScreenshot = await buildProofUrl(o.payment.instaPayAssetKey);
           } catch (err) {
@@ -237,7 +251,8 @@ export async function GET(req: NextRequest) {
         cod_fee: ((o.pricing?.codFeePiasters ?? o.codFeePiasters) || 0) / 100,
         total: ((o.pricing?.totalMinor ?? o.totalPiasters) || 0) / 100,
         currency: 'EGP',
-        status: o.status || 'pending',
+        // Translated to the admin vocabulary (new → pending, processing → confirmed).
+        status: toAdminStatus(o.status),
         payment_method: (o.payment?.method || o.paymentMethod) === 'cod' ? 'cashOnDelivery' : (o.payment?.method || o.paymentMethod),
         payment_status: o.payment?.status || o.paymentStatus || 'pending',
         payment_screenshot: paymentScreenshot,
@@ -277,18 +292,35 @@ export async function GET(req: NextRequest) {
  * Update order status.
  */
 export async function PATCH(req: NextRequest) {
-  const denied = await guardAdmin();
-  if (denied) return denied;
+  let admin;
+  try {
+    admin = await requireAdmin();
+  } catch {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+  }
 
   try {
-    await connectDB();
     const { id, status } = await req.json();
     if (!id || !status) {
       return NextResponse.json({ success: false, error: 'Order ID and status required' }, { status: 400 });
     }
-    await Order.findByIdAndUpdate(id, { status });
-    return NextResponse.json({ success: true });
+
+    // The admin UI sends its own labels; only a real, stored status may be
+    // written. This used to pass the raw value to findByIdAndUpdate, which
+    // skips schema validation and let invalid statuses into the database.
+    const stored = toStoredStatus(String(status));
+    if (!stored) {
+      return NextResponse.json({ success: false, error: `Unknown status: ${status}` }, { status: 400 });
+    }
+
+    // Through the service, so the change is recorded in statusHistory and
+    // cancelling returns the order's stock.
+    const order = await orderService.updateStatus(String(id), stored, admin.adminId);
+    return NextResponse.json({ success: true, status: toAdminStatus(order.status) });
   } catch (error) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+    }
     console.error('[PATCH /api/orders]', error);
     return NextResponse.json({ success: false, error: 'Failed to update order status' }, { status: 500 });
   }
@@ -305,10 +337,13 @@ export async function DELETE(req: NextRequest) {
   try {
     await connectDB();
     const { id } = await req.json();
-    if (!id) {
+    if (!id || !isValidObjectId(id)) {
       return NextResponse.json({ success: false, error: 'Order ID required' }, { status: 400 });
     }
-    await Order.findByIdAndDelete(id);
+    const deleted = await Order.findByIdAndDelete(id);
+    if (!deleted) {
+      return NextResponse.json({ success: false, error: 'Order not found' }, { status: 404 });
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('[DELETE /api/orders]', error);

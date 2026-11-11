@@ -1,17 +1,21 @@
 import type { MetadataRoute } from 'next';
+import { getSiteUrl } from '@/lib/site';
 import connectDB from '@/lib/db/mongoose';
 import { Category } from '@/lib/db/models/category.model';
 import { Product } from '@/lib/db/models/product.model';
 
+// Rebuilt hourly. Without this the sitemap was generated once at build time,
+// so products added since the last deploy were never listed.
+export const revalidate = 3600;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_VERCEL_URL
-    ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-    : 'http://localhost:3000';
+  const baseUrl = getSiteUrl();
 
   // Static pages
   const staticPages: MetadataRoute.Sitemap = [
     { url: baseUrl, lastModified: new Date(), changeFrequency: 'daily', priority: 1 },
     { url: `${baseUrl}/shop`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.9 },
+    { url: `${baseUrl}/bouquet`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.8 },
     { url: `${baseUrl}/categories`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.8 },
     { url: `${baseUrl}/contact`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.5 },
     { url: `${baseUrl}/shipping`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.3 },

@@ -1,27 +1,32 @@
 import { NextResponse } from 'next/server';
-import connectDB from '@/lib/db/mongoose';
-import { getSettings } from '@/lib/db/models/store-settings.model';
+import { getCheckoutConfig } from '@/features/settings/server/settings.service';
 
 /**
  * GET /api/governorate-pricing
- * Public endpoint — returns shipping zones for checkout form.
+ * Public endpoint — enabled shipping zones.
+ *
+ * The checkout page now receives this from the server with its first render
+ * (see app/(store)/checkout/page.tsx); the route remains for other clients.
  */
 export async function GET() {
   try {
-    await connectDB();
-    const settings = await getSettings();
+    const config = await getCheckoutConfig();
 
-    const pricing = settings.shippingZones
+    const pricing = config.shippingZones
       .filter((z) => z.enabled)
       .map((z) => ({
         governorate: z.governorate,
         shipping_cost: z.feeMinor,
-        cod_fee: z.codFeeMinor ?? 0,
+        cod_fee: z.codFeeMinor,
         estimated_days: z.estimatedDays,
         is_active: true,
       }));
 
-    return NextResponse.json({ success: true, pricing });
+    return NextResponse.json({
+      success: true,
+      pricing,
+      freeDeliveryThresholdMinor: config.freeDeliveryThresholdMinor,
+    });
   } catch (error) {
     console.error('[GET /api/governorate-pricing]', error);
     return NextResponse.json(

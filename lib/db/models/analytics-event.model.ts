@@ -80,6 +80,12 @@ analyticsEventSchema.index(
   { name: 'funnel_reconstruction' }
 );
 
+// Every funnel query filters by period first, then groups by event.
+analyticsEventSchema.index(
+  { occurredAt: -1, event: 1 },
+  { name: 'funnel_period' }
+);
+
 analyticsEventSchema.index(
   { expiresAt: 1 },
   { expireAfterSeconds: 0, name: 'analytics_ttl' }

@@ -6,7 +6,7 @@
 import connectDB from '@/lib/db/mongoose';
 import { Product, type IProduct } from '@/lib/db/models/product.model';
 import { Category } from '@/lib/db/models/category.model';
-import type { Types } from 'mongoose';
+import { isValidObjectId, type Types } from 'mongoose';
 import type {
   ProductFilter,
   PaginationParams,
@@ -100,7 +100,7 @@ function toListItem(doc: IProduct, categoryNames: string[] = []): ProductListIte
     maxPricePiasters: doc.priceRange?.maxMinor !== doc.priceRange?.minMinor
       ? doc.priceRange?.maxMinor
       : undefined,
-    totalStock: doc.variants
+    totalStock: (doc.variants ?? [])
       .filter((v) => v.status === 'active')
       .reduce((sum, v) => sum + v.stock, 0),
     status: doc.status,
@@ -109,6 +109,15 @@ function toListItem(doc: IProduct, categoryNames: string[] = []): ProductListIte
 }
 
 // ─── Helpers ────────────────────────────────────────────────────
+
+/** Fields `toListItem` reads. Keep the two in step. */
+const LIST_PROJECTION =
+  'name slug status type categoryIds priceRange createdAt ' +
+  'media.publicUrl media.sortOrder variants.status variants.stock';
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 async function resolveCategoryNames(categoryIds: Array<string | Types.ObjectId>): Promise<string[]> {
   if (!categoryIds?.length) return [];
@@ -130,23 +139,52 @@ export const productRepository = {
 
     const query: MongoFilter = {};
     if (filter.status) query.status = filter.status;
-    if (filter.categoryId) query.categoryIds = filter.categoryId;
+
+    // Several categories are one `$in` query. The shop page used to run a
+    // separate query per selected category and merge the results by hand,
+    // which also made it impossible to paginate or sort them correctly.
+    const categoryIds = [
+      ...(filter.categoryIds ?? []),
+      ...(filter.categoryId ? [filter.categoryId] : []),
+    ].filter((id) => isValidObjectId(id));
+    if (filter.categoryId || filter.categoryIds?.length) {
+      // An id that is not an ObjectId can match nothing — and would otherwise
+      // throw a CastError (a 500) straight from a URL parameter.
+      if (categoryIds.length === 0) {
+        return { items: [], total: 0, page: pagination.page, pageSize: pagination.pageSize, totalPages: 0 };
+      }
+      query.categoryIds = categoryIds.length === 1 ? categoryIds[0] : { $in: categoryIds };
+    }
+
     if (filter.search) {
+      // Escaped: the raw text used to be handed to MongoDB as a regular
+      // expression, so a "(" in the search box was a server error.
+      const pattern = escapeRegex(filter.search.trim().slice(0, 100));
       query.$or = [
-        { name: { $regex: filter.search, $options: 'i' } },
-        { 'variants.sku': { $regex: filter.search, $options: 'i' } },
+        { name: { $regex: pattern, $options: 'i' } },
+        { 'variants.sku': { $regex: pattern, $options: 'i' } },
       ];
     }
 
     const sortField = filter.sortBy ?? 'createdAt';
     const sortDir = filter.sortOrder === 'asc' ? 1 : -1;
-    const sortQuery: Record<string, 1 | -1> = { [sortField === 'price' ? 'priceRange.minMinor' : sortField]: sortDir };
+    // `_id` breaks ties so pages never repeat or skip a product.
+    const sortQuery: Record<string, 1 | -1> = {
+      [sortField === 'price' ? 'priceRange.minMinor' : sortField]: sortDir,
+      _id: sortDir,
+    };
+
+    const page = Math.max(1, Math.floor(pagination.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Math.floor(pagination.pageSize) || 12));
 
     const [docs, total] = await Promise.all([
       Product.find(query)
+        // Only what a card needs — descriptions, SEO, options and the full
+        // media gallery of every product were being loaded for each grid.
+        .select(LIST_PROJECTION)
         .sort(sortQuery)
-        .skip((pagination.page - 1) * pagination.pageSize)
-        .limit(pagination.pageSize)
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
         .lean<IProduct[]>(),
       Product.countDocuments(query),
     ]);
@@ -167,13 +205,22 @@ export const productRepository = {
     return {
       items,
       total,
-      page: pagination.page,
-      pageSize: pagination.pageSize,
-      totalPages: Math.ceil(total / pagination.pageSize),
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
     };
   },
 
+  /** Resolve a product id to its current slug (for links that only know the id). */
+  async findSlugById(id: string): Promise<string | null> {
+    if (!isValidObjectId(id)) return null;
+    await connectDB();
+    const doc = await Product.findOne({ _id: id, status: 'active' }, { slug: 1 }).lean();
+    return doc?.slug ?? null;
+  },
+
   async findById(id: string): Promise<ProductDTO | null> {
+    if (!isValidObjectId(id)) return null; // a malformed id is "not found", not a 500
     await connectDB();
     const doc = await Product.findById(id).lean<IProduct>();
     if (!doc) return null;
@@ -222,10 +269,24 @@ export const productRepository = {
 
   async update(id: string, data: Partial<IProduct>): Promise<ProductDTO | null> {
     await connectDB();
+    if (!isValidObjectId(id)) return null;
     const doc = await Product.findById(id);
     if (!doc) return null;
 
-    Object.assign(doc, data);
+    // The service describes a slug change as `$push: { previousSlugs }`.
+    // Object.assign copied that onto the document as a stray `$push` property
+    // and it was never applied, so the redirect from a product's old URL to
+    // its new one never worked. Apply it to the array explicitly.
+    const { $push, ...fields } = data as Partial<IProduct> & {
+      $push?: { previousSlugs?: string };
+    };
+    Object.assign(doc, fields);
+    if ($push?.previousSlugs && !doc.previousSlugs.includes($push.previousSlugs)) {
+      doc.previousSlugs.push($push.previousSlugs);
+    }
+    // A slug that is live again must stop redirecting elsewhere.
+    doc.previousSlugs = doc.previousSlugs.filter((s) => s !== doc.slug);
+
     await doc.save(); // Triggers pre-save for priceRange derivation
 
     const names = await resolveCategoryNames(doc.categoryIds);

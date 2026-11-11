@@ -1,4 +1,5 @@
 import mongoose, { Schema, type Document, type Model, type Types } from 'mongoose';
+import connectDB from '../mongoose';
 import type {
   IShippingZone,
   IDeliverySchedule,
@@ -239,9 +240,24 @@ export const StoreSettings: Model<IStoreSettings> =
  * Get or create the singleton settings document.
  */
 export async function getSettings(): Promise<IStoreSettings> {
+  // Connect here rather than trusting every caller to have done it. The
+  // bouquet catalogue read settings in parallel with its other queries, and
+  // on a cold start this one could run before the connection existed. With
+  // `bufferCommands: false` that throws — so the home page silently dropped
+  // its bouquet section and /bouquet rendered "coming soon", then stayed that
+  // way until the cached page was next regenerated.
+  await connectDB();
+
   let settings = await StoreSettings.findOne({ key: 'main' });
   if (!settings) {
-    settings = await StoreSettings.create({ key: 'main' });
+    try {
+      settings = await StoreSettings.create({ key: 'main' });
+    } catch (error) {
+      // Two cold starts raced to create the singleton; the unique index let
+      // one win. Read the winner instead of failing the request.
+      settings = await StoreSettings.findOne({ key: 'main' });
+      if (!settings) throw error;
+    }
   }
   return settings;
 }

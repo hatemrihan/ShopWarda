@@ -152,6 +152,8 @@ export interface CategoryFilter {
 export interface ProductFilter {
   status?: 'draft' | 'active' | 'archived';
   categoryId?: string;
+  /** Match products in any of these categories. */
+  categoryIds?: string[];
   search?: string;
   sortBy?: 'name' | 'price' | 'createdAt' | 'updatedAt';
   sortOrder?: 'asc' | 'desc';

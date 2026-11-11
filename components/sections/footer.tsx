@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { subscribeAction } from '@/features/engagement/server/engagement.actions';
 
@@ -9,6 +9,33 @@ export function SiteFooter() {
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
+
+  // The footer clip is 8 MB and sits at the very bottom of every page. It was
+  // an autoplaying <video>, so every visit to every page began downloading it
+  // whether or not the visitor ever scrolled that far. It is now mounted only
+  // once the footer approaches the viewport — and if the file is missing or
+  // the browser cannot play it, the block is removed instead of showing an
+  // empty dark box.
+  const videoWrapRef = useRef<HTMLDivElement>(null);
+  const [videoInView, setVideoInView] = useState(false);
+  const [videoFailed, setVideoFailed] = useState(false);
+
+  useEffect(() => {
+    const node = videoWrapRef.current;
+    if (!node || videoInView) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVideoInView(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '300px 0px' }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [videoInView]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,20 +63,26 @@ export function SiteFooter() {
 
 
       {/* Showcase Video Container replacing the 3 images */}
-      <div className="relative max-w-[900px] mx-auto px-4 mb-16">
+      {!videoFailed && (
+        <div ref={videoWrapRef} className="relative max-w-[900px] mx-auto px-4 mb-16">
 
-        {/* Video Player */}
-        <div className="w-full h-[230px] md:h-[260px] overflow-hidden rounded-sm relative bg-[#1e291d]">
-          <video
-            src="/videos/video.mov"
-            autoPlay
-            loop
-            muted
-            playsInline
-            className="w-full h-full object-cover"
-          />
+          {/* Video Player */}
+          <div className="w-full h-[230px] md:h-[260px] overflow-hidden rounded-sm relative bg-[#1e291d]">
+            {videoInView && (
+              <video
+                src="/videos/video.mov"
+                autoPlay
+                loop
+                muted
+                playsInline
+                preload="metadata"
+                onError={() => setVideoFailed(true)}
+                className="w-full h-full object-cover"
+              />
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Footer Links & Information Grid */}
       <div className="max-w-[1240px] mx-auto px-6 pt-6 pb-16">

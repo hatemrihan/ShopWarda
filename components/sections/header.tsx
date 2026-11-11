@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ShoppingBag, Menu, X, Search } from 'lucide-react';
@@ -26,17 +26,34 @@ export function SiteHeader() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
+  // Desktop and mobile each render their own input. They used to share one
+  // ref, which always ended up pointing at the mobile input (it mounts last),
+  // so on desktop the search opened without a cursor in it.
+  const desktopInputRef = useRef<HTMLInputElement>(null);
+  const mobileInputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
   const desktopSearchRef = useRef<HTMLDivElement>(null);
   const mobileSearchRef = useRef<HTMLDivElement>(null);
   const mobileBtnRef = useRef<HTMLButtonElement>(null);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Cancels the in-flight lookup when a newer one starts. Responses can
+  // arrive out of order; without this, results for "ro" could replace the
+  // results for "roses".
+  const searchAbortRef = useRef<AbortController | null>(null);
+
+  const cancelPendingSearch = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    searchAbortRef.current?.abort();
+    searchAbortRef.current = null;
+  }, []);
 
   const closeSearch = useCallback(() => {
+    cancelPendingSearch();
     setSearchOpen(false);
     setSearchQuery('');
     setSearchResults([]);
-  }, []);
+    setSearchLoading(false);
+  }, [cancelPendingSearch]);
 
   const toggleSearch = useCallback(() => {
     setSearchOpen((prev) => {
@@ -60,7 +77,13 @@ export function SiteHeader() {
   // Focus input when search opens
   useEffect(() => {
     if (searchOpen) {
-      const timer = setTimeout(() => searchInputRef.current?.focus(), 100);
+      const timer = setTimeout(() => {
+        // Focus whichever input is actually on screen.
+        const visible = [desktopInputRef.current, mobileInputRef.current].find(
+          (el) => el && el.offsetParent !== null
+        );
+        visible?.focus();
+      }, 100);
       return () => clearTimeout(timer);
     }
   }, [searchOpen]);
@@ -96,8 +119,7 @@ export function SiteHeader() {
   // ── Debounced search ─────────────────────────────────────────
   const handleSearch = useCallback((query: string) => {
     setSearchQuery(query);
-
-    if (debounceRef.current) clearTimeout(debounceRef.current);
+    cancelPendingSearch();
 
     if (query.trim().length < 1) {
       setSearchResults([]);
@@ -107,19 +129,38 @@ export function SiteHeader() {
 
     setSearchLoading(true);
     debounceRef.current = setTimeout(async () => {
+      const controller = new AbortController();
+      searchAbortRef.current = controller;
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`, { cache: 'no-store' });
+        const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`, {
+          signal: controller.signal,
+        });
         const data = await res.json();
-        if (data.success) {
-          setSearchResults(data.products || []);
-        }
-      } catch (err) {
-        console.error('Search failed:', err);
+        if (controller.signal.aborted) return;
+        setSearchResults(data.success ? data.products || [] : []);
+      } catch {
+        if (controller.signal.aborted) return; // superseded by a newer search
+        setSearchResults([]);
       } finally {
-        setSearchLoading(false);
+        if (!controller.signal.aborted) setSearchLoading(false);
       }
     }, 300);
-  }, []);
+  }, [cancelPendingSearch]);
+
+  // Enter opens the full results page.
+  const submitSearch = useCallback(
+    (event: React.SyntheticEvent) => {
+      event.preventDefault();
+      const term = searchQuery.trim();
+      if (!term) return;
+      closeSearch();
+      router.push(`/search?q=${encodeURIComponent(term)}`);
+    },
+    [searchQuery, closeSearch, router]
+  );
+
+  // Drop any pending lookup when the header unmounts.
+  useEffect(() => cancelPendingSearch, [cancelPendingSearch]);
 
 
   // Always use dark style — hero has a light background
@@ -187,10 +228,12 @@ export function SiteHeader() {
                 {searchOpen && (
                   <div className="absolute top-full right-0 mt-2 w-[380px] bg-white rounded-xl shadow-2xl border border-neutral-200/80 overflow-hidden z-[60] animate-in fade-in slide-in-from-top-2 duration-200">
                     {/* Search Input */}
-                    <div className="flex items-center gap-3 px-4 py-3 border-b border-neutral-100 bg-neutral-50/50">
+                    <form onSubmit={submitSearch} role="search" className="flex items-center gap-3 px-4 py-3 border-b border-neutral-100 bg-neutral-50/50">
                       <Search className="h-4 w-4 text-neutral-400 flex-shrink-0" />
                       <input
-                        ref={searchInputRef}
+                        ref={desktopInputRef}
+                        aria-label="Search products"
+                        enterKeyHint="search"
                         type="text"
                         value={searchQuery}
                         onChange={(e) => handleSearch(e.target.value)}
@@ -199,13 +242,15 @@ export function SiteHeader() {
                       />
                       {searchQuery && (
                         <button
-                          onClick={() => { setSearchQuery(''); setSearchResults([]); searchInputRef.current?.focus(); }}
+                          type="button"
+                          aria-label="Clear search"
+                          onClick={() => { handleSearch(''); desktopInputRef.current?.focus(); }}
                           className="text-neutral-400 hover:text-neutral-600 transition-colors"
                         >
                           <X className="h-4 w-4" />
                         </button>
                       )}
-                    </div>
+                    </form>
 
                     {/* Results */}
                     <div className="max-h-[340px] overflow-y-auto">
@@ -320,23 +365,27 @@ export function SiteHeader() {
           <div className="md:hidden animate-in fade-in slide-in-from-top-2 duration-200" ref={mobileSearchRef}>
             <div className="bg-white border-t border-b border-neutral-200 shadow-lg">
               {/* Search Input */}
-              <div className="flex items-center gap-3 px-4 py-3 border-b border-neutral-100">
+              <form onSubmit={submitSearch} role="search" className="flex items-center gap-3 px-4 py-3 border-b border-neutral-100">
                 <Search className="h-4 w-4 text-neutral-400 flex-shrink-0" />
                 <input
-                  ref={searchInputRef}
+                  ref={mobileInputRef}
+                  aria-label="Search products"
+                  enterKeyHint="search"
                   type="text"
                   value={searchQuery}
                   onChange={(e) => handleSearch(e.target.value)}
                   placeholder="Search products..."
-                  className="w-full text-xs text-neutral-900 placeholder:text-neutral-400 outline-none bg-transparent"
+                  className="w-full text-base text-neutral-900 placeholder:text-neutral-400 outline-none bg-transparent"
                 />
                 <button
+                  type="button"
+                  aria-label="Close search"
                   onClick={closeSearch}
                   className="text-neutral-400 hover:text-neutral-600 transition-colors"
                 >
                   <X className="h-4 w-4" />
                 </button>
-              </div>
+              </form>
 
               {/* Results */}
               <div className="max-h-[50vh] overflow-y-auto">

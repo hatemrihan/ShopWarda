@@ -1,55 +1,80 @@
 import type { Metadata } from 'next';
+import { cache } from 'react';
 import { notFound, redirect } from 'next/navigation';
 import { productService } from '@/features/catalog/server/product.service';
 import { ProductView } from '@/components/sections/product-view';
-import connectDB from '@/lib/db/mongoose';
-import { getSettings } from '@/lib/db/models/store-settings.model';
+import { getStorefrontSettings } from '@/features/settings/server/settings.service';
+import type { ProductDTO } from '@/features/catalog/types';
 
 interface Props {
   params: Promise<{ slug: string }>;
 }
 
+type Lookup =
+  | { kind: 'found'; product: ProductDTO }
+  | { kind: 'moved'; slug: string }
+  | { kind: 'missing' };
+
+/**
+ * One lookup per request, shared by generateMetadata and the page — each used
+ * to resolve the product (and, for an unknown slug, run the redirect query)
+ * separately.
+ */
+const lookupProduct = cache(async (slug: string): Promise<Lookup> => {
+  try {
+    return { kind: 'found', product: await productService.getBySlug(slug) };
+  } catch (error: unknown) {
+    const redirectSlug = (error as { redirectSlug?: unknown } | null)?.redirectSlug;
+    if (typeof redirectSlug === 'string') return { kind: 'moved', slug: redirectSlug };
+    return { kind: 'missing' };
+  }
+});
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  try {
-    const product = await productService.getBySlug(slug);
-    const primaryImage = product.media.find((m) => m.isPrimary) ?? product.media[0];
-    return {
+  const result = await lookupProduct(slug);
+  if (result.kind !== 'found') return { title: 'Product' };
+
+  const { product } = result;
+  const primaryImage =
+    product.media.find((m) => m.isPrimary && m.type !== 'video') ??
+    product.media.find((m) => m.type !== 'video');
+  const description =
+    product.seo?.description ?? product.shortDescription ?? product.description?.slice(0, 160);
+
+  return {
+    title: product.seo?.title ?? product.name,
+    description,
+    alternates: { canonical: `/product/${product.slug}` },
+    openGraph: {
       title: product.seo?.title ?? product.name,
-      description: product.seo?.description ?? product.shortDescription ?? product.description?.slice(0, 160),
-      openGraph: {
-        images: primaryImage ? [{ url: primaryImage.url }] : undefined,
-      },
-    };
-  } catch {
-    return { title: 'Product' };
-  }
+      description,
+      images: primaryImage ? [{ url: primaryImage.url }] : undefined,
+    },
+  };
 }
 
 export default async function ProductPage({ params }: Props) {
   const { slug } = await params;
+  const result = await lookupProduct(slug);
 
-  let product;
-  try {
-    product = await productService.getBySlug(slug);
-  } catch (error: unknown) {
-    if (error && typeof error === 'object' && 'redirectSlug' in error && typeof (error as { redirectSlug?: unknown }).redirectSlug === 'string') {
-      redirect(`/product/${(error as { redirectSlug: string }).redirectSlug}`);
-    }
-    notFound();
-  }
+  if (result.kind === 'moved') redirect(`/product/${result.slug}`);
+  if (result.kind === 'missing') notFound();
 
-  const relatedResult = await productService.list(
-    { status: 'active', sortBy: 'createdAt', sortOrder: 'desc' },
-    { page: 1, pageSize: 8 }
+  const { product } = result;
+
+  // Both cached. These were an uncached product query and an uncached
+  // settings read on every single product view.
+  const [relatedProducts, settings] = await Promise.all([
+    productService.listRelatedCached(product.id, product.categoryIds),
+    getStorefrontSettings(),
+  ]);
+
+  return (
+    <ProductView
+      product={product}
+      relatedProducts={relatedProducts}
+      sizeGuide={settings.sizeGuide}
+    />
   );
-  const relatedProducts = relatedResult.items.filter((item) => item.id !== product.id).slice(0, 4);
-
-  // Fetch size guide from store settings
-  await connectDB();
-  const settings = await getSettings();
-  const sizeGuide = settings.sizeGuide ? JSON.parse(JSON.stringify(settings.sizeGuide)) : null;
-
-  return <ProductView product={product} relatedProducts={relatedProducts} sizeGuide={sizeGuide} />;
 }
-

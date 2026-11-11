@@ -82,6 +82,8 @@ export function ProductFilterBar({
 
       // Remove defaults
       if (params.get('sort') === 'newest') params.delete('sort');
+      // A new sort or filter is a new result set — always start at page 1.
+      params.delete('page');
 
       const qs = params.toString();
       return `${basePath}${qs ? `?${qs}` : ''}`;
